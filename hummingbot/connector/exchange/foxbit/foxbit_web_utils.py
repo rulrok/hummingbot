@@ -18,7 +18,7 @@ def public_rest_url(path_url: str,
     :param domain: The default value is "com.br". Not in use at this time.
     :return: the full URL to the endpoint
     """
-    return f"https://{CONSTANTS.REST_URL}/rest/{CONSTANTS.PUBLIC_API_VERSION}/{path_url}"
+    return f"{CONSTANTS.REST_URL.format(CONSTANTS.DEFAULT_DOMAIN)}{CONSTANTS.PUBLIC_API_VERSION}{path_url}"
 
 
 def private_rest_url(path_url: str,
@@ -30,18 +30,17 @@ def private_rest_url(path_url: str,
     :param domain: The default value is "com.br". Not in use at this time.
     :return: the full URL to the endpoint
     """
-    return f"https://{CONSTANTS.REST_URL}/rest/{CONSTANTS.PRIVATE_API_VERSION}/{path_url}"
+    return f"{CONSTANTS.REST_URL.format(CONSTANTS.DEFAULT_DOMAIN)}{CONSTANTS.PRIVATE_API_VERSION}{path_url}"
 
 
-def rest_endpoint_url(full_url: str,
-                      ) -> str:
+def rest_endpoint_url(full_url: str) -> str:
     """
     Creates a REST endpoint
     :param full_url: a full url
     :return: the URL endpoint
     """
-    url_size = len(f"https://{CONSTANTS.REST_URL}")
-    return full_url[url_size:]
+    url_prefix = CONSTANTS.REST_URL.format(CONSTANTS.DEFAULT_DOMAIN)
+    return full_url[len(url_prefix):]
 
 
 def websocket_url() -> str:
@@ -49,7 +48,7 @@ def websocket_url() -> str:
     Creates a full URL for provided WebSocket endpoint
     :return: the full URL to the endpoint
     """
-    return f"wss://{CONSTANTS.WSS_URL}/"
+    return f"wss://{CONSTANTS.WSS_URL}{CONSTANTS.DEFAULT_DOMAIN}/"
 
 
 def format_ws_header(header: Dict[str, Any]) -> Dict[str, Any]:

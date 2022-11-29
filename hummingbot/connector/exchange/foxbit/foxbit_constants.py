@@ -10,25 +10,25 @@ MAX_ORDER_ID_LEN = 20
 # Base URL
 # REST_URL = "api.foxbit.com.br"
 # WSS_URL = "api.foxbit.com.br"
-REST_URL = "api-homolog.thesail.pro"
-WSS_URL = "foxbit-api-gateway-homolog.thesail.pro"
+REST_URL = "https://api.foxbit.{}"
+WSS_URL = "wss://api.foxbit.{}/WSGateway"
 
-PUBLIC_API_VERSION = "v3"
-PRIVATE_API_VERSION = "v3"
+PUBLIC_API_VERSION = "/rest/v3"
+PRIVATE_API_VERSION = "/rest/v3"
 
 # Public API endpoints or FoxbitClient function
 TICKER_PRICE_CHANGE_PATH_URL = "SubscribeLevel1"
-EXCHANGE_INFO_PATH_URL = "markets"
-PING_PATH_URL = "system/time"
-SNAPSHOT_PATH_URL = "markets/{}/orderbook"
-SERVER_TIME_PATH_URL = "system/time"
+EXCHANGE_INFO_PATH_URL = "/markets"
+PING_PATH_URL = "/system/time"
+SNAPSHOT_PATH_URL = "/markets/{}/orderbook"
+SERVER_TIME_PATH_URL = "/system/time"
 
 # Private API endpoints or FoxbitClient function
-ACCOUNTS_PATH_URL = "accounts"
-MY_TRADES_PATH_URL = "trades"
-ORDER_PATH_URL = "orders"
-CANCEL_ORDER_PATH_URL = "orders/cancel"
-GET_ORDER_BY_ID = "orders/by-order-id/{}"
+ACCOUNTS_PATH_URL = "/accounts"
+MY_TRADES_PATH_URL = "/trades"
+ORDER_PATH_URL = "/orders"
+CANCEL_ORDER_PATH_URL = "/orders/cancel"
+GET_ORDER_BY_ID = "/orders/by-order-id/{}"
 
 WS_HEADER = {
     "Content-Type": "application/json",

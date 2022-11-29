@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from hummingbot.connector.exchange.foxbit import foxbit_web_utils as web_utils
 from hummingbot.connector.time_synchronizer import TimeSynchronizer
 from hummingbot.core.web_assistant.auth import AuthBase
-from hummingbot.core.web_assistant.connections.data_types import RESTMethod, RESTRequest, WSRequest
+from hummingbot.core.web_assistant.connections.data_types import RESTRequest, WSRequest
 
 
 class FoxbitAuth(AuthBase):
@@ -16,40 +16,33 @@ class FoxbitAuth(AuthBase):
         self.user_id = user_id
         self.time_provider = time_provider
 
-    async def rest_authenticate(self,
-                                request: RESTRequest,
-                                ) -> RESTRequest:
+    async def rest_authenticate(self, request: RESTRequest) -> RESTRequest:
         """
-        Adds the server time and the signature to the request, required for authenticated interactions. It also adds
-        the required parameter in the request header.
-        :param request: the request to be configured for authenticated interaction
+        Signs the request using HMAC and adds it along with the necessary HTTP headers.
+        Each request is individually signed off.
         """
+
         timestamp = str(int(datetime.now(timezone.utc).timestamp() * 1e3))
 
-        endpoint_url = web_utils.rest_endpoint_url(request.url)
+        method = str(request.method).upper()
+        path = web_utils.rest_endpoint_url(request.url)
 
-        params = request.params if request.params is not None else ""
-        if request.method == RESTMethod.GET and request.params is not None:
-            params = ''
+        query = ""
+        if request.params is not None:
+            query = ''
             i = 0
             for p in request.params:
                 k = p
                 v = request.params[p]
                 if i == 0:
-                    params = params + f"{k}={v}"
+                    query = query + f"{k}={v}"
                 else:
-                    params = params + f"&{k}={v}"
+                    query = query + f"&{k}={v}"
                 i += 1
 
-        data = request.data if request.data is not None else ""
+        body = request.data if request.data is not None else ""
 
-        to_payload = params if len(params) > 0 else data
-
-        payload = '{}{}{}{}'.format(timestamp,
-                                    request.method,
-                                    endpoint_url,
-                                    to_payload
-                                    )
+        payload = '{}{}{}{}{}'.format(timestamp, method, path, query, body)
 
         signature = hmac.new(self.secret_key.encode("utf8"),
                              payload.encode("utf8"),
