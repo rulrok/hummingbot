@@ -171,7 +171,7 @@ class FoxbitExchange(ExchangePyBase):
         symbol_map = await self.trading_pair_instrument_id_map()
         return symbol_map.inverse[trading_pair]
 
-    async def trading_pair_associated_to_exchange_instrument_id(self, instrument_id: str,) -> str:
+    async def trading_pair_associated_to_exchange_instrument_id(self, instrument_id: str, ) -> str:
         """
         Used to translate a trading pair from the exchange notation to the client notation
         :param instrument_id: Instrument_Id in exchange notation
@@ -317,14 +317,16 @@ class FoxbitExchange(ExchangePyBase):
             return
 
         if amount < trading_rule.min_order_size:
-            self.logger().warning(f"{trade_type.name.title()} order amount {amount.normalize()} is lower than the minimum order"
-                                  f" size {trading_rule.min_order_size}. The order will not be created.")
+            self.logger().warning(
+                f"{trade_type.name.title()} order amount {amount.normalize()} is lower than the minimum order"
+                f" size {trading_rule.min_order_size}. The order will not be created.")
             self._update_order_after_failure(order_id=order_id, trading_pair=trading_pair)
             return
         if price is not None and amount * price < trading_rule.min_notional_size:
-            self.logger().warning(f"{trade_type.name.title()} order notional {(amount * price).normalize()} is lower than the "
-                                  f"minimum notional size {trading_rule.min_notional_size}. "
-                                  "The order will not be created.")
+            self.logger().warning(
+                f"{trade_type.name.title()} order notional {(amount * price).normalize()} is lower than the "
+                f"minimum notional size {trading_rule.min_notional_size}. "
+                "The order will not be created.")
             self._update_order_after_failure(order_id=order_id, trading_pair=trading_pair)
 
         try:
@@ -493,7 +495,8 @@ class FoxbitExchange(ExchangePyBase):
                     "market_symbol": await self.exchange_symbol_associated_to_pair(trading_pair=trading_pair)
                 }
                 if self._last_poll_timestamp > 0:
-                    params["start_time"] = (datetime.utcnow() - timedelta(minutes=self.SHORT_POLL_INTERVAL)).isoformat()[:23] + "Z"
+                    params["start_time"] = (datetime.utcnow() - timedelta(
+                        minutes=self.SHORT_POLL_INTERVAL)).isoformat()[:23] + "Z"
                 tasks.append(self._api_get(
                     path_url=CONSTANTS.MY_TRADES_PATH_URL,
                     params=params,
@@ -534,24 +537,31 @@ class FoxbitExchange(ExchangePyBase):
                         )
                         self._order_tracker.process_trade_update(trade_update)
                     elif self.is_confirmed_new_order_filled_event(str(trade["id"]), exchange_order_id, trading_pair):
-                        # This is a fill of an order registered in the DB but not tracked any more
+                        # This is a fill of an order registered in the DB but not tracked anymore
                         self._current_trade_fills.add(TradeFillOrderDetails(
                             market=self.display_name,
                             exchange_trade_id=str(trade["id"]),
                             symbol=trading_pair))
+                        trade_type = TradeType.BUY if trade["side"] == "BUY" else TradeType.SELL
+                        fee = TradeFeeBase.new_spot_fee(
+                            fee_schema=self.trade_fee_schema(),
+                            trade_type=trade_type,
+                            percent_token=str(trade["fee_currency_symbol"]),
+                            flat_fees=[
+                                TokenAmount(amount=Decimal(trade["fee"]), token=str(trade["fee_currency_symbol"]))]
+                        )
+
                         self.trigger_event(
                             MarketEvent.OrderFilled,
-                            OrderFilledEvent(
-                                timestamp=parser.parse(trade["created_at"]).timestamp(),
-                                order_id=self._exchange_order_ids.get(str(trade["order_id"]), None),
-                                trading_pair=trading_pair,
-                                trade_type=TradeType.BUY if trade["side"] == "BUY" else TradeType.SELL,
-                                order_type=OrderType.LIMIT,
-                                price=Decimal(trade["price"]),
-                                amount=Decimal(trade["quantity"]),
-                                trade_fee=trade["fee"],
-                            ),
-                            exchange_trade_id=str(trade["id"])
+                            OrderFilledEvent(timestamp=parser.parse(trade["created_at"]).timestamp(),
+                                             order_id=self._exchange_order_ids.get(str(trade["order_id"]), None),
+                                             trading_pair=trading_pair,
+                                             trade_type=trade_type,
+                                             order_type=OrderType.LIMIT,
+                                             price=Decimal(trade["price"]),
+                                             amount=Decimal(trade["quantity"]),
+                                             trade_fee=fee,
+                                             exchange_trade_id=str(trade["id"])),
                         )
                         self.logger().info(f"Recreating missing trade in TradeFill: {trade}")
 
@@ -629,7 +639,7 @@ class FoxbitExchange(ExchangePyBase):
 
             auth_header = foxbit_utils.get_ws_message_frame(endpoint="GetInstruments",
                                                             msg_type=CONSTANTS.WS_MESSAGE_FRAME_TYPE["Request"],
-                                                            payload={"OMSId": 1},)
+                                                            payload={"OMSId": 1}, )
             subscribe_request: WSJSONRequest = WSJSONRequest(payload=web_utils.format_ws_header(auth_header))
 
             await ws.send(subscribe_request)
