@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple
 
 from bidict import bidict
+from dateutil import parser
 
 from hummingbot.connector.constants import s_decimal_NaN
 from hummingbot.connector.exchange.foxbit import (
@@ -529,7 +530,7 @@ class FoxbitExchange(ExchangePyBase):
                             fill_base_amount=Decimal(trade["quantity"]),
                             fill_quote_amount=Decimal(trade["quantity"]),
                             fill_price=Decimal(trade["price"]),
-                            fill_timestamp=datetime.fromisoformat(trade["created_at"]).timestamp(),
+                            fill_timestamp=parser.parse(trade["created_at"]).timestamp(),
                         )
                         self._order_tracker.process_trade_update(trade_update)
                     elif self.is_confirmed_new_order_filled_event(str(trade["id"]), exchange_order_id, trading_pair):
@@ -541,7 +542,7 @@ class FoxbitExchange(ExchangePyBase):
                         self.trigger_event(
                             MarketEvent.OrderFilled,
                             OrderFilledEvent(
-                                timestamp=datetime.fromisoformat(trade["created_at"]).timestamp(),
+                                timestamp=parser.parse(trade["created_at"]).timestamp(),
                                 order_id=self._exchange_order_ids.get(str(trade["order_id"]), None),
                                 trading_pair=trading_pair,
                                 trade_type=TradeType.BUY if trade["side"] == "BUY" else TradeType.SELL,
@@ -673,7 +674,7 @@ class FoxbitExchange(ExchangePyBase):
                     fill_base_amount=Decimal(trade["quantity"]),
                     fill_quote_amount=Decimal(trade["quantity"]),
                     fill_price=Decimal(trade["price"]),
-                    fill_timestamp=datetime.fromisoformat(trade["created_at"]).timestamp(),
+                    fill_timestamp=parser.parse(trade["created_at"]).timestamp(),
                 )
                 trade_updates.append(trade_update)
 
