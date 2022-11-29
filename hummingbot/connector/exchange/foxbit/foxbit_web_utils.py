@@ -48,7 +48,7 @@ def websocket_url() -> str:
     Creates a full URL for provided WebSocket endpoint
     :return: the full URL to the endpoint
     """
-    return f"wss://{CONSTANTS.WSS_URL}{CONSTANTS.DEFAULT_DOMAIN}/"
+    return f"{CONSTANTS.WSS_URL.format(CONSTANTS.DEFAULT_DOMAIN)}/"
 
 
 def format_ws_header(header: Dict[str, Any]) -> Dict[str, Any]:
