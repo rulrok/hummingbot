@@ -14,8 +14,8 @@ EXAMPLE_PAIR = "BTC-BRL"
 _seq_nr: int = 0
 
 DEFAULT_FEES = TradeFeeSchema(
-    maker_percent_fee_decimal=Decimal("0.001"),
-    taker_percent_fee_decimal=Decimal("0.001"),
+    maker_percent_fee_decimal=Decimal("0.0025"),
+    taker_percent_fee_decimal=Decimal("0.0050"),
     buy_percent_fee_deducted_from_returns=True
 )
 
