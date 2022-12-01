@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from hummingbot.connector.time_synchronizer import TimeSynchronizer
 from hummingbot.core.web_assistant.auth import AuthBase
@@ -14,11 +14,13 @@ class DigitraAuth(AuthBase):
         self.time_provider = time_provider
 
     async def rest_authenticate(self, request: RESTRequest) -> RESTRequest:
-        digitra_auth_headers = self.__generate_auth_headers(params=request.params)
+        auth_headers = self.__generate_auth_headers()
+
         headers = {}
         if request.headers is not None:
             headers.update(request.headers)
-        headers.update(digitra_auth_headers)
+
+        headers.update(auth_headers)
         request.headers = headers
         return request
 
@@ -29,10 +31,11 @@ class DigitraAuth(AuthBase):
         }
         return request  # pass-through
 
-    def __generate_auth_headers(self, params: Optional[Dict[str, Any]]):
+    def __generate_auth_headers(self):
         """
         Adds Authorization header with jwt token to request
         """
-        request_params = params or {}
-        request_params["Authorization"] = "Bearer: " + self.jwt
-        return request_params
+        headers = {
+            "Authorization": "Bearer: " + self.jwt
+        }
+        return headers
