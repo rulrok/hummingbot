@@ -5,7 +5,7 @@ DEFAULT_DOMAIN = "api"
 REST_SUBDOM_TRADE = "trade"
 REST_SUBDOM_BALANCE = "balance"
 
-REST_URL = "https://{}.{}.digitra.com/"
+REST_URL = "https://{0}.{1}.digitra.com/"
 
 PUBLIC_API_VERSION = "v1"
 PRIVATE_API_VERSION = "v1"
@@ -26,7 +26,16 @@ ENDPOINT_SUBDOM_MAP = {
     API_BALANCES: REST_SUBDOM_BALANCE
 }
 
-# Rate limit portion
+
+def endpoint_subdomain(path: str) -> str or None:
+    for k, v in ENDPOINT_SUBDOM_MAP.items():
+        if str(k).__contains__(path):
+            return v
+
+    return None
+
+    # Rate limit portion
+
 
 HTTP_ENDPOINTS_LIMIT_ID = "AllHTTP"
 MAX_REQUESTS = 1500
