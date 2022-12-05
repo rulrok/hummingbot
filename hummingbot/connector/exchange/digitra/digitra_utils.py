@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Any, Dict
 
 from pydantic import Field, SecretStr
 
@@ -13,6 +14,15 @@ DEFAULT_FEES = TradeFeeSchema(
     maker_percent_fee_decimal=Decimal("0.000"),
     taker_percent_fee_decimal=Decimal("0.000"),
 )
+
+
+def is_exchange_information_valid(exchange_info: Dict[str, Any]) -> bool:
+    """
+    Verifies if a trading pair is enabled to operate with based on its exchange information
+    :param exchange_info: the exchange information for a trading pair
+    :return: True if the trading pair is enabled, False otherwise
+    """
+    return exchange_info.get("enabled") is True
 
 
 class DigitraConfigMap(BaseConnectorConfigMap):
