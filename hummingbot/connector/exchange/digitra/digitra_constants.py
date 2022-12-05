@@ -1,11 +1,14 @@
 from hummingbot.core.api_throttler.data_types import LinkedLimitWeightPair, RateLimit
 
-DEFAULT_DOMAIN = "api"
+DEFAULT_DOMAIN = "digitra"
 
 REST_SUBDOM_TRADE = "trade"
 REST_SUBDOM_BALANCE = "balance"
 
-REST_URL = "https://{0}.{1}.digitra.com/"
+REST_URL = {
+    "digitra": "https://{0}.api.digitra.com/",
+    "digitra_testnet": "https://{0}.stg-hb.cloud.digitra.com/",
+}
 
 PUBLIC_API_VERSION = "v1"
 PRIVATE_API_VERSION = "v1"

@@ -62,7 +62,7 @@ class DigitraConfigMap(BaseConnectorConfigMap):
 KEYS = DigitraConfigMap.construct()
 
 OTHER_DOMAINS = ["digitra_testnet"]
-OTHER_DOMAINS_PARAMETER = {"digitra_testnet": "stg-hb.cloud"}
+OTHER_DOMAINS_PARAMETER = {"digitra_testnet": "digitra_testnet"}
 OTHER_DOMAINS_EXAMPLE_PAIR = {"digitra_testnet": "BTC-BRL"}
 OTHER_DOMAINS_DEFAULT_FEES = {"digitra_testnet": DEFAULT_FEES}
 

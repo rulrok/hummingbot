@@ -11,12 +11,12 @@ from hummingbot.core.web_assistant.web_assistants_factory import WebAssistantsFa
 
 def public_rest_url(path_url: str, domain: str = CONSTANTS.DEFAULT_DOMAIN) -> str:
     subdomain = CONSTANTS.endpoint_subdomain(path_url)
-    return CONSTANTS.REST_URL.format(subdomain, domain) + CONSTANTS.PUBLIC_API_VERSION + path_url
+    return CONSTANTS.REST_URL[domain].format(subdomain) + CONSTANTS.PUBLIC_API_VERSION + path_url
 
 
 def private_rest_url(path_url: str, domain: str = CONSTANTS.DEFAULT_DOMAIN) -> str:
     subdomain = CONSTANTS.endpoint_subdomain(path_url)
-    return CONSTANTS.REST_URL.format(subdomain, domain) + CONSTANTS.PRIVATE_API_VERSION + path_url
+    return CONSTANTS.REST_URL[domain].format(subdomain) + CONSTANTS.PRIVATE_API_VERSION + path_url
 
 
 def build_api_factory(
