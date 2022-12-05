@@ -7,7 +7,8 @@ from hummingbot.core.web_assistant.connections.data_types import RESTRequest, WS
 
 class DigitraAuth(AuthBase):
 
-    def __init__(self, jwt: str, api_key: Optional[str], secret_key: Optional[str], time_provider: TimeSynchronizer):
+    def __init__(self, jwt: str, time_provider: TimeSynchronizer, api_key: Optional[str] = None,
+                 secret_key: Optional[str] = None):
         self.jwt = jwt
         self.api_key = api_key
         self.secret_key = secret_key
@@ -16,7 +17,9 @@ class DigitraAuth(AuthBase):
     async def rest_authenticate(self, request: RESTRequest) -> RESTRequest:
         auth_headers = self.__generate_auth_headers()
 
-        headers = {}
+        headers = {
+            "Accept": "application/json"
+        }
         if request.headers is not None:
             headers.update(request.headers)
 
@@ -36,6 +39,6 @@ class DigitraAuth(AuthBase):
         Adds Authorization header with jwt token to request
         """
         headers = {
-            "Authorization": "Bearer: " + self.jwt
+            "Authorization": "Bearer " + self.jwt
         }
         return headers
