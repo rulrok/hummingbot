@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+import time
 from typing import Callable, Optional
 
 import hummingbot.connector.exchange.digitra.digitra_constants as CONSTANTS
@@ -56,6 +56,4 @@ async def get_current_server_time(
     # throttler = throttler or create_throttler()
     # api_factory = build_api_factory_without_time_synchronizer_pre_processor(throttler=throttler)
 
-    timezone_offset = -3.0
-    tzinfo = timezone(timedelta(hours=timezone_offset))
-    return datetime.now(tzinfo).timestamp()
+    return time.perf_counter()
