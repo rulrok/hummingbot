@@ -1,30 +1,24 @@
 import asyncio
-from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional
+
+from dateutil import parser
 
 import hummingbot.connector.exchange.digitra.digitra_constants as CONSTANTS
 from hummingbot.connector.exchange.digitra import digitra_web_utils as web_utils
 from hummingbot.connector.exchange.digitra.digitra_order_book import DigitraOrderBook
 from hummingbot.connector.time_synchronizer import TimeSynchronizer
 from hummingbot.core.api_throttler.async_throttler import AsyncThrottler
-from hummingbot.core.data_type.order_book_message import OrderBookMessage
+from hummingbot.core.data_type.order_book_message import OrderBookMessage, OrderBookMessageType
 from hummingbot.core.data_type.order_book_tracker_data_source import OrderBookTrackerDataSource
 from hummingbot.core.web_assistant.connections.data_types import RESTMethod, WSJSONRequest
 from hummingbot.core.web_assistant.web_assistants_factory import WebAssistantsFactory
 from hummingbot.core.web_assistant.ws_assistant import WSAssistant
-from hummingbot.logger import HummingbotLogger
 
 if TYPE_CHECKING:
     from hummingbot.connector.exchange.digitra.digitra_exchange import DigitraExchange
 
 
 class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
-    HEARTBEAT_TIME_INTERVAL = 30.0
-    TRADE_STREAM_ID = 1
-    DIFF_STREAM_ID = 2
-    ONE_HOUR = 60 * 60
-
-    _logger: Optional[HummingbotLogger] = None
     _trading_pair_symbol_map: Dict[str, Mapping[str, str]] = {}
     _mapping_initialization_lock = asyncio.Lock()
 
@@ -37,7 +31,6 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
                  time_synchronizer: Optional[TimeSynchronizer] = None):
         super().__init__(trading_pairs)
         self._connector = connector
-        self._diff_messages_queue_key = CONSTANTS.DIFF_EVENT_TYPE
         self._domain = domain
         self._time_synchronizer = time_synchronizer
         self._throttler = throttler
@@ -46,111 +39,119 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
             time_synchronizer=self._time_synchronizer,
             domain=self._domain,
         )
-        self._message_queue: Dict[str, asyncio.Queue] = defaultdict(asyncio.Queue)
-        self._last_ws_message_sent_timestamp = 0
 
     async def get_last_traded_prices(self,
                                      trading_pairs: List[str],
                                      domain: Optional[str] = None) -> Dict[str, float]:
-        return await self._connector.get_last_traded_prices(trading_pairs=trading_pairs)
+        rest_assistant = await self._api_factory.get_rest_assistant()
 
-    async def _request_order_book_snapshot(self, trading_pair: str) -> Dict[str, Any]:
-        """
-        Retrieves a copy of the full order book from the exchange, for a particular trading pair.
+        prices_response = await rest_assistant.execute_request(
+            url=web_utils.public_rest_url(CONSTANTS.API_ALL_MARKETS, self._domain),
+            method=RESTMethod.GET,
+            params={
+                "expand": "PRICES"
+            },
+            throttler_limit_id=CONSTANTS.HTTP_ENDPOINTS_LIMIT_ID
+        )
 
-        :param trading_pair: the trading pair for which the order book will be retrieved
+        trading_pairs_prices = [(p.get('id'), p.get('prices')["price"]) for p in prices_response['result'] if
+                                p.get("id") in trading_pairs]
 
-        :return: the response from the exchange (JSON dictionary)
-        """
-        params = {
-            "symbol": await self._connector.exchange_symbol_associated_to_pair(trading_pair=trading_pair),
-            "limit": "1000"
-        }
-        data = await self._connector._api_request(path_url=CONSTANTS.SNAPSHOT_PATH_URL,
-                                                  method=RESTMethod.GET,
-                                                  params=params)
-        return data['result']
+        return dict(trading_pairs_prices)
 
     async def _order_book_snapshot(self, trading_pair: str) -> OrderBookMessage:
-        snapshot: Dict[str, Any] = await self._request_order_book_snapshot(trading_pair)
-        snapshot_timestamp: float = float(snapshot["time"]) * 1e-3
-        snapshot_msg: OrderBookMessage = DigitraOrderBook.snapshot_message_from_exchange_rest(
-            snapshot,
-            snapshot_timestamp,
-            metadata={"trading_pair": trading_pair}
+        market_trading_pair = await self._connector.exchange_symbol_associated_to_pair(trading_pair=trading_pair)
+
+        rest_assistant = await self._api_factory.get_rest_assistant()
+        snapshot_response = await rest_assistant.execute_request(
+            url=web_utils.public_rest_url(CONSTANTS.API_MARKET.format(market_symbol=market_trading_pair), self._domain),
+            method=RESTMethod.GET,
+            params={
+                "expand": "ORDER_BOOK"
+            },
+            throttler_limit_id=CONSTANTS.HTTP_ENDPOINTS_LIMIT_ID
         )
-        return snapshot_msg
+
+        snapshot_data: Dict[str, Any] = snapshot_response["result"]
+        snapshot_timestamp: float = self._time()
+
+        return DigitraOrderBook.snapshot_message_from_exchange_rest(
+            snapshot_data, snapshot_timestamp,
+            metadata={"update_id": snapshot_timestamp}
+        )
 
     async def _parse_trade_message(self, raw_message: Dict[str, Any], message_queue: asyncio.Queue):
-        trading_pair = await self._connector.trading_pair_associated_to_exchange_symbol(symbol=raw_message["symbol"])
-        for trades in raw_message["data"]:
-            trade_message: OrderBookMessage = DigitraOrderBook.trade_message_from_exchange(
-                trades, {"trading_pair": trading_pair})
-            message_queue.put_nowait(trade_message)
+        trade_data: Dict[str, Any] = raw_message["data"]
+        trade_timestamp: int = int(parser.isoparse(trade_data["time"]).timestamp())
+        trading_pair = await self._connector.trading_pair_associated_to_exchange_symbol(symbol=trade_data["market"])
+
+        message_content = {
+            "trading_pair": trading_pair,
+            # TODO
+            # "trade_type": (float(TradeType.SELL.value)
+            #                if trade_data["side"] == "sell"
+            #                else float(TradeType.BUY.value)),
+            "trade_id": trade_timestamp,
+            "update_id": trade_timestamp,
+            "price": trade_data["last"],
+            # "amount": trade_data["x"], TODO
+        }
+        trade_message: Optional[OrderBookMessage] = OrderBookMessage(
+            message_type=OrderBookMessageType.TRADE,
+            content=message_content,
+            timestamp=trade_timestamp)
+
+        message_queue.put_nowait(trade_message)
 
     async def _parse_order_book_diff_message(self, raw_message: Dict[str, Any], message_queue: asyncio.Queue):
-        trading_pair = await self._connector.trading_pair_associated_to_exchange_symbol(symbol=raw_message["symbol"])
-        for diff_message in raw_message["data"]:
-            order_book_message: OrderBookMessage = DigitraOrderBook.diff_message_from_exchange(
-                diff_message, diff_message["t"], {"trading_pair": trading_pair})
-            message_queue.put_nowait(order_book_message)
+        pass
 
-    async def listen_for_order_book_snapshots(self, ev_loop: asyncio.AbstractEventLoop, output: asyncio.Queue):
-        """
-        This method runs continuously and request the full order book content from the exchange every hour.
-        The method uses the REST API from the exchange because it does not provide an endpoint to get the full order
-        book through websocket. With the information creates a snapshot messages that is added to the output queue
-        :param ev_loop: the event loop the method will run in
-        :param output: a queue to add the created snapshot messages
-        """
-        while True:
-            try:
-                await asyncio.wait_for(self._process_ob_snapshot(snapshot_queue=output), timeout=self.ONE_HOUR)
-            except asyncio.TimeoutError:
-                await self._take_full_order_book_snapshot(trading_pairs=self._trading_pairs, snapshot_queue=output)
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                self.logger().error("Unexpected error.", exc_info=True)
-                await self._take_full_order_book_snapshot(trading_pairs=self._trading_pairs, snapshot_queue=output)
-                await self._sleep(5.0)
+    async def _parse_order_book_snapshot_message(self, raw_message: Dict[str, Any], message_queue: asyncio.Queue):
+        snapshot_data: Dict[str, Any] = {}
+        snapshot_timestamp: float = parser.isoparse(raw_message.get("data")["time"]).timestamp()
 
-    async def listen_for_subscriptions(self):
-        """
-        Connects to the trade events and order diffs websocket endpoints and listens to the messages sent by the
-        exchange. Each message is stored in its own queue.
-        """
-        ws = None
-        while True:
-            try:
-                ws: WSAssistant = await self._api_factory.get_ws_assistant()
-                await ws.connect(ws_url=CONSTANTS.WSS_V1_PUBLIC_URL[self._domain])
-                await self._subscribe_channels(ws)
-                self._last_ws_message_sent_timestamp = self._time()
+        ob = DigitraOrderBook.snapshot_message_from_exchange_rest(
+            snapshot_data, snapshot_timestamp,
+            metadata={
+                "id": raw_message.get("market"),
+                "order_book": {
+                    "bids": [{"price": bid[0], "size": bid[1]} for bid in raw_message["data"]["bids"]],
+                    "asks": [{"price": ask[0], "size": ask[1]} for ask in raw_message["data"]["asks"]],
+                },
+                "update_id": snapshot_timestamp
+            }
+        )
 
-                while True:
-                    try:
-                        seconds_until_next_ping = (CONSTANTS.WS_HEARTBEAT_TIME_INTERVAL -
-                                                   (self._time() - self._last_ws_message_sent_timestamp))
-                        await asyncio.wait_for(self._process_ws_messages(ws=ws), timeout=seconds_until_next_ping)
-                    except asyncio.TimeoutError:
-                        ping_time = self._time()
-                        payload = {
-                            "ping": int(ping_time * 1e3)
-                        }
-                        ping_request = WSJSONRequest(payload=payload)
-                        await ws.send(request=ping_request)
-                        self._last_ws_message_sent_timestamp = ping_time
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                self.logger().error(
-                    "Unexpected error occurred when listening to order book streams. Retrying in 5 seconds...",
-                    exc_info=True,
-                )
-                await self._sleep(5.0)
-            finally:
-                ws and await ws.disconnect()
+        message_queue.put_nowait(ob)
+
+    def _channel_originating_message(self, event_message: Dict[str, Any]) -> str:
+        channel = event_message.get("channel")
+        t = event_message.get("type")
+
+        if t == "subscribed":
+            self.logger().info(event_message)
+            return "subscribed"
+
+        if t == "pong":
+            self.logger().debug(event_message)
+            return "pong"
+
+        if t == "update":
+            if channel == "ticker":
+                return self._trade_messages_queue_key
+            if channel == "orderbook":
+                return self._snapshot_messages_queue_key  # Digitra sends the whole book on each update as of today
+
+        return "unknown"
+
+    async def _process_message_for_unknown_channel(self,
+                                                   event_message: Dict[str, Any],
+                                                   websocket_assistant: WSAssistant):
+        if "pong" or "subscribed" in event_message["type"]:
+            pass
+
+        if "unknown" in event_message["type"]:
+            self.logger().info("unknown event received", event_message)
 
     async def _subscribe_channels(self, ws: WSAssistant):
         """
@@ -161,22 +162,16 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
             for trading_pair in self._trading_pairs:
                 symbol = await self._connector.exchange_symbol_associated_to_pair(trading_pair=trading_pair)
                 trade_payload = {
-                    "topic": "trade",
-                    "event": "sub",
-                    "symbol": symbol,
-                    "params": {
-                        "binary": False
-                    }
+                    "op": "subscribe",
+                    "channel": "ticker",
+                    "market": symbol,
                 }
                 subscribe_trade_request: WSJSONRequest = WSJSONRequest(payload=trade_payload)
 
                 depth_payload = {
-                    "topic": "diffDepth",
-                    "event": "sub",
-                    "symbol": symbol,
-                    "params": {
-                        "binary": False
-                    }
+                    "op": "subscribe",
+                    "channel": "orderbook",
+                    "market": symbol,
                 }
                 subscribe_orderbook_request: WSJSONRequest = WSJSONRequest(payload=depth_payload)
 
@@ -193,51 +188,22 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
             )
             raise
 
-    async def _process_ws_messages(self, ws: WSAssistant):
-        async for ws_response in ws.iter_messages():
-            data = ws_response.data
-            if data.get("msg") == "Success":
-                continue
-            event_type = data.get("topic")
-            if event_type == CONSTANTS.DIFF_EVENT_TYPE:
-                if data.get("f"):
-                    self._message_queue[CONSTANTS.SNAPSHOT_EVENT_TYPE].put_nowait(data)
-                else:
-                    self._message_queue[CONSTANTS.DIFF_EVENT_TYPE].put_nowait(data)
-            elif event_type == CONSTANTS.TRADE_EVENT_TYPE:
-                self._message_queue[CONSTANTS.TRADE_EVENT_TYPE].put_nowait(data)
+    async def _connected_websocket_assistant(self) -> WSAssistant:
+        websocket_assistant: WSAssistant = await self._api_factory.get_ws_assistant()
+        await websocket_assistant.connect(
+            ws_url=CONSTANTS.WSS_PRIVATE_URL[self._domain],
+        )
+        asyncio.ensure_future(self.__ping_loop(websocket_assistant))
+        return websocket_assistant
 
-    async def _process_ob_snapshot(self, snapshot_queue: asyncio.Queue):
-        message_queue = self._message_queue[CONSTANTS.SNAPSHOT_EVENT_TYPE]
-        while True:
-            try:
-                json_msg = await message_queue.get()
-                trading_pair = await self._connector.trading_pair_associated_to_exchange_symbol(
-                    symbol=json_msg["symbol"])
-                order_book_message: OrderBookMessage = DigitraOrderBook.snapshot_message_from_exchange_websocket(
-                    json_msg["data"][0], json_msg["data"][0], {"trading_pair": trading_pair})
-                snapshot_queue.put_nowait(order_book_message)
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                self.logger().error("Unexpected error when processing public order book updates from exchange")
-                raise
+    async def __ping_loop(self, websocket_assistant):
+        await asyncio.ensure_future(self.__send_ping(websocket_assistant))
+        await asyncio.sleep(1)
 
-    async def _take_full_order_book_snapshot(self, trading_pairs: List[str], snapshot_queue: asyncio.Queue):
-        for trading_pair in trading_pairs:
-            try:
-                snapshot: Dict[str, Any] = await self._request_order_book_snapshot(trading_pair=trading_pair)
-                snapshot_timestamp: float = float(snapshot["time"]) * 1e-3
-                snapshot_msg: OrderBookMessage = DigitraOrderBook.snapshot_message_from_exchange_rest(
-                    snapshot,
-                    snapshot_timestamp,
-                    metadata={"trading_pair": trading_pair}
-                )
-                snapshot_queue.put_nowait(snapshot_msg)
-                self.logger().debug(f"Saved order book snapshot for {trading_pair}")
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                self.logger().error(f"Unexpected error fetching order book snapshot for {trading_pair}.",
-                                    exc_info=True)
-                await self._sleep(5.0)
+        await self.__ping_loop(websocket_assistant)
+
+    async def __send_ping(self, websocket_assistant):
+        payload = {"op": "ping"}
+        ping_request = WSJSONRequest(payload=payload)
+        await websocket_assistant.send(request=ping_request)
+        self.logger().info('OB ping sent')

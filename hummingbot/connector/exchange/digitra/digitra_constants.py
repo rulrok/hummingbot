@@ -10,12 +10,17 @@ REST_URL = {
     "digitra_testnet": "https://{0}.stg-hb.cloud.digitra.com/",
 }
 
+WSS_PRIVATE_URL = {
+    "digitra_testnet": "wss://taxi-driver-websocket.dev.cloud.atris.com.br/v1/ws"
+}
+
 PUBLIC_API_VERSION = "v1"
 PRIVATE_API_VERSION = "v1"
 
 # Public endpoints
 HEALTH_CHECK_URL = "/health-check"
-API_MARKETS = "/markets/{}"
+API_ALL_MARKETS = "/markets"
+API_MARKET = "/markets/{market_symbol}"
 
 # Private endpoints
 API_BALANCES = "/balances"
@@ -23,16 +28,23 @@ API_BALANCES = "/balances"
 ENDPOINT_SUBDOM_MAP = {
     # Trade
     HEALTH_CHECK_URL: REST_SUBDOM_TRADE,
-    API_MARKETS: REST_SUBDOM_TRADE,
+    API_MARKET: REST_SUBDOM_TRADE,
+    API_ALL_MARKETS: REST_SUBDOM_TRADE,
 
     # Balance
     API_BALANCES: REST_SUBDOM_BALANCE
 }
 
+WS_HEARTBEAT_TIME_INTERVAL = 30
+
+DIFF_EVENT_TYPE = "diffDepth"
+TRADE_EVENT_TYPE = "trade"
+SNAPSHOT_EVENT_TYPE = "depth"
+
 
 def endpoint_subdomain(path: str) -> str or None:
     for k, v in ENDPOINT_SUBDOM_MAP.items():
-        if str(k).__contains__(path):
+        if str(path).__contains__(k):
             return v
 
     return None
@@ -53,7 +65,7 @@ RATE_LIMITS = [
     RateLimit(limit_id=HEALTH_CHECK_URL, limit=MAX_REQUESTS, time_interval=MINUTE,
               linked_limits=[LinkedLimitWeightPair(HTTP_ENDPOINTS_LIMIT_ID)]),
 
-    RateLimit(limit_id=API_MARKETS.format("")[:-1], limit=MAX_REQUESTS, time_interval=MINUTE,
+    RateLimit(limit_id=API_ALL_MARKETS, limit=MAX_REQUESTS, time_interval=MINUTE,
               linked_limits=[LinkedLimitWeightPair(HTTP_ENDPOINTS_LIMIT_ID)]),
 
     RateLimit(limit_id=API_BALANCES, limit=MAX_REQUESTS, time_interval=MINUTE,
