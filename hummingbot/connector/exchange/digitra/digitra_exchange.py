@@ -6,6 +6,8 @@ from hummingbot.connector.exchange.digitra import (
     digitra_utils,
     digitra_web_utils as web_utils,
 )
+from hummingbot.connector.exchange.digitra.digitra_api_order_book_data_source import DigitraAPIOrderBookDataSource
+from hummingbot.connector.exchange.digitra.digitra_api_user_stream_data_source import DigitraAPIUserStreamDataSource
 from hummingbot.connector.exchange.digitra.digitra_auth import DigitraAuth
 from hummingbot.connector.exchange_base import bidict
 from hummingbot.connector.exchange_py_base import ExchangePyBase
@@ -41,16 +43,15 @@ class DigitraExchange(ExchangePyBase):
         self._domain = domain
         self._trading_required = trading_required
         self._trading_pairs = trading_pairs
-        self._last_trades_poll_digitra_timestamp = 1.0
         super().__init__(client_config_map)
-
-    @property
-    def name(self) -> str:
-        pass
 
     @property
     def authenticator(self) -> AuthBase:
         return DigitraAuth(jwt=self.api_jwt, time_provider=self._time_synchronizer)
+
+    @property
+    def name(self) -> str:
+        return self.domain
 
     @property
     def rate_limits_rules(self) -> List[RateLimit]:
@@ -62,7 +63,7 @@ class DigitraExchange(ExchangePyBase):
 
     @property
     def client_order_id_max_length(self) -> int:
-        pass
+        return 32
 
     @property
     def client_order_id_prefix(self) -> str:
@@ -70,15 +71,15 @@ class DigitraExchange(ExchangePyBase):
 
     @property
     def trading_rules_request_path(self) -> str:
-        pass
+        return CONSTANTS.API_ALL_MARKETS
 
     @property
     def trading_pairs_request_path(self) -> str:
-        return CONSTANTS.API_MARKETS.format("")[:-1]  # Remove leading slash
+        return CONSTANTS.API_ALL_MARKETS
 
     @property
     def check_network_request_path(self) -> str:
-        pass
+        return CONSTANTS.HEALTH_CHECK_URL
 
     @property
     def trading_pairs(self) -> List[str]:
@@ -93,30 +94,83 @@ class DigitraExchange(ExchangePyBase):
         return self._trading_required
 
     def supported_order_types(self) -> List[OrderType]:
-        return [OrderType.MARKET, OrderType.LIMIT]
+        return [OrderType.LIMIT, OrderType.MARKET]
 
     def _is_request_exception_related_to_time_synchronizer(self, request_exception: Exception) -> bool:
         return False
 
-    async def _place_cancel(self, order_id: str, tracked_order: InFlightOrder):
-        pass
+    def _create_web_assistants_factory(self) -> WebAssistantsFactory:
+        return web_utils.build_api_factory(
+            throttler=self._throttler,
+            time_synchronizer=self._time_synchronizer,
+            domain=self.domain,
+            auth=self._auth)
 
-    async def _place_order(self, order_id: str, trading_pair: str, amount: Decimal, trade_type: TradeType,
-                           order_type: OrderType, price: Decimal, **kwargs) -> Tuple[str, float]:
-        pass
+    def _create_order_book_data_source(self) -> OrderBookTrackerDataSource:
+        return DigitraAPIOrderBookDataSource(
+            trading_pairs=self._trading_pairs,
+            connector=self,
+            domain=self.domain,
+            api_factory=self._web_assistants_factory)
+
+    def _create_user_stream_data_source(self) -> UserStreamTrackerDataSource:
+
+        return DigitraAPIUserStreamDataSource(
+            auth=self._auth,
+            trading_pairs=self._trading_pairs,
+            connector=self,
+            api_factory=self._web_assistants_factory,
+            domain=self.domain,
+        )
 
     def _get_fee(self, base_currency: str, quote_currency: str, order_type: OrderType, order_side: TradeType,
                  amount: Decimal, price: Decimal = 0,
                  is_maker: Optional[bool] = None) -> AddedToCostTradeFee:
         pass
 
+    async def _place_order(self, order_id: str, trading_pair: str, amount: Decimal, trade_type: TradeType,
+                           order_type: OrderType, price: Decimal, **kwargs) -> Tuple[str, float]:
+        pass
+
+    async def _place_cancel(self, order_id: str, tracked_order: InFlightOrder):
+        pass
+
+    async def _format_trading_rules(self, exchange_info_dict: Dict[str, Any]) -> List[TradingRule]:
+        trading_pair_rules = exchange_info_dict.get("result", [])
+        retval = []
+        for rule in filter(digitra_utils.is_exchange_information_valid, trading_pair_rules):
+            try:
+                trading_pair = await self.trading_pair_associated_to_exchange_symbol(symbol=rule.get("id"))
+
+                min_order_size = Decimal(rule.get("minimum_order_size"))
+                tick_size = rule.get("price_increment_size")
+                step_size = Decimal(rule.get("increment_size"))
+                min_notional = Decimal(rule.get("minimum_order_size"))
+
+                retval.append(
+                    TradingRule(trading_pair,
+                                min_order_size=min_order_size,
+                                min_price_increment=Decimal(tick_size),
+                                min_base_amount_increment=Decimal(step_size),
+                                min_notional_size=Decimal(min_notional)))
+
+            except Exception:
+                self.logger().exception(f"Error parsing the trading pair rule {rule}. Skipping.")
+        return retval
+
     async def _update_trading_fees(self):
+        """
+        Update fees information from the exchange
+        """
         pass
 
     async def _user_stream_event_listener(self):
         pass
 
-    async def _format_trading_rules(self, exchange_info_dict: Dict[str, Any]) -> List[TradingRule]:
+    async def _all_trade_updates_for_order(self, order: InFlightOrder) -> List[TradeUpdate]:
+        pass
+
+    async def _request_order_status(self, tracked_order: InFlightOrder) -> OrderUpdate:
         pass
 
     async def _update_balances(self):
@@ -154,22 +208,5 @@ class DigitraExchange(ExchangePyBase):
                                                                     quote=symbol_data["quote_currency"])
         self._set_trading_pair_symbol_map(mapping)
 
-    async def _all_trade_updates_for_order(self, order: InFlightOrder) -> List[TradeUpdate]:
-        pass
-
-    async def _request_order_status(self, tracked_order: InFlightOrder) -> OrderUpdate:
-        pass
-
-    def _create_web_assistants_factory(self) -> WebAssistantsFactory:
-        return web_utils.build_api_factory(
-            throttler=self._throttler,
-            time_synchronizer=self._time_synchronizer,
-            domain=self.domain,
-            auth=self._auth
-        )
-
-    def _create_order_book_data_source(self) -> OrderBookTrackerDataSource:
-        pass
-
-    def _create_user_stream_data_source(self) -> UserStreamTrackerDataSource:
-        pass
+    async def get_last_traded_prices(self, trading_pairs: List[str], domain: Optional[str] = None) -> Dict[str, float]:
+        return DigitraAPIOrderBookDataSource.get_last_traded_prices(trading_pairs, domain)
