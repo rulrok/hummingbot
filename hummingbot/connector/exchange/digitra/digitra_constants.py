@@ -1,4 +1,5 @@
 from hummingbot.core.api_throttler.data_types import LinkedLimitWeightPair, RateLimit
+from hummingbot.core.data_type.in_flight_order import OrderState
 
 DEFAULT_DOMAIN = "digitra"
 
@@ -42,6 +43,18 @@ WS_PING_INTERVAL = 10
 DIFF_EVENT_TYPE = "diffDepth"
 TRADE_EVENT_TYPE = "trade"
 SNAPSHOT_EVENT_TYPE = "depth"
+
+ORDER_STATE_MAPPING = {
+    "SUBMITTING": OrderState.PENDING_CREATE,
+    "OPEN": OrderState.OPEN,
+    "PENDING_CANCELING": OrderState.PENDING_CANCEL,
+    "CANCELED": OrderState.CANCELED,
+    "PARTIALLY_FILLED": OrderState.PARTIALLY_FILLED,
+    "FILLED": OrderState.FILLED,
+    # TODO Revise two states below
+    "PENDING_BALANCE": OrderState.PENDING_APPROVAL,
+    "CANCELED_PENDING_BALANCE": OrderState.FAILED
+}
 
 
 def endpoint_subdomain(path: str) -> str or None:

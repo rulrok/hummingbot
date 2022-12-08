@@ -1,6 +1,8 @@
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
+from dateutil import parser
+
 from hummingbot.connector.exchange.digitra import (
     digitra_constants as CONSTANTS,
     digitra_utils,
@@ -17,14 +19,11 @@ from hummingbot.core.api_throttler.data_types import RateLimit
 from hummingbot.core.data_type.common import OrderType, TradeType
 from hummingbot.core.data_type.in_flight_order import InFlightOrder, OrderState, OrderUpdate, TradeUpdate
 from hummingbot.core.data_type.order_book_tracker_data_source import OrderBookTrackerDataSource
-from hummingbot.core.data_type.trade_fee import AddedToCostTradeFee
+from hummingbot.core.data_type.trade_fee import AddedToCostTradeFee, TradeFeeBase
 from hummingbot.core.data_type.user_stream_tracker_data_source import UserStreamTrackerDataSource
 from hummingbot.core.web_assistant.auth import AuthBase
 from hummingbot.core.web_assistant.connections.data_types import RESTMethod
 from hummingbot.core.web_assistant.web_assistants_factory import WebAssistantsFactory
-
-# from dateutil import parser
-
 
 if TYPE_CHECKING:
     from hummingbot.client.config.config_helpers import ClientConfigAdapter
@@ -127,8 +126,14 @@ class DigitraExchange(ExchangePyBase):
 
     def _get_fee(self, base_currency: str, quote_currency: str, order_type: OrderType, order_side: TradeType,
                  amount: Decimal, price: Decimal = 0,
-                 is_maker: Optional[bool] = None) -> AddedToCostTradeFee:
-        pass
+                 is_maker: Optional[bool] = None) -> TradeFeeBase:
+
+        # Note it must either return 'DeductedFromReturnsTradeFee' or 'AddedToCostTradeFee' to comply with signature
+
+        # Zero fee
+        return AddedToCostTradeFee(
+            percent=Decimal(0)
+        )
 
     async def _place_order(
             self,
@@ -210,6 +215,7 @@ class DigitraExchange(ExchangePyBase):
                 min_notional = Decimal(rule.get("minimum_order_size"))
 
                 retval.append(
+                    # TODO Revise if params are correct
                     TradingRule(trading_pair,
                                 min_order_size=min_order_size,
                                 min_price_increment=Decimal(tick_size),
@@ -233,7 +239,22 @@ class DigitraExchange(ExchangePyBase):
         pass
 
     async def _request_order_status(self, tracked_order: InFlightOrder) -> OrderUpdate:
-        pass
+
+        order_status = await self._api_get(
+            path_url=CONSTANTS.API_ORDER_PATH.format(order_id=tracked_order.exchange_order_id)
+        )
+
+        new_state = CONSTANTS[order_status["status"]]
+
+        order_update = OrderUpdate(
+            client_order_id=tracked_order.client_order_id,
+            exchange_order_id=order_status["id"],
+            trading_pair=tracked_order.trading_pair,
+            update_timestamp=parser.isoparse(order_status["updated_at"]).timestamp(),
+            new_state=new_state
+        )
+
+        return order_update
 
     async def _update_balances(self):
         local_asset_names = set(self._account_balances.keys())
