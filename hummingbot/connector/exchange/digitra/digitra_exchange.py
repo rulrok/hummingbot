@@ -23,6 +23,9 @@ from hummingbot.core.web_assistant.auth import AuthBase
 from hummingbot.core.web_assistant.connections.data_types import RESTMethod
 from hummingbot.core.web_assistant.web_assistants_factory import WebAssistantsFactory
 
+# from dateutil import parser
+
+
 if TYPE_CHECKING:
     from hummingbot.client.config.config_helpers import ClientConfigAdapter
 
@@ -111,16 +114,15 @@ class DigitraExchange(ExchangePyBase):
             trading_pairs=self._trading_pairs,
             connector=self,
             domain=self.domain,
-            api_factory=self._web_assistants_factory)
+            api_factory=self._web_assistants_factory
+        )
 
     def _create_user_stream_data_source(self) -> UserStreamTrackerDataSource:
 
         return DigitraAPIUserStreamDataSource(
             auth=self._auth,
-            trading_pairs=self._trading_pairs,
-            connector=self,
-            api_factory=self._web_assistants_factory,
             domain=self.domain,
+            api_factory=self._web_assistants_factory,
         )
 
     def _get_fee(self, base_currency: str, quote_currency: str, order_type: OrderType, order_side: TradeType,
@@ -128,9 +130,45 @@ class DigitraExchange(ExchangePyBase):
                  is_maker: Optional[bool] = None) -> AddedToCostTradeFee:
         pass
 
-    async def _place_order(self, order_id: str, trading_pair: str, amount: Decimal, trade_type: TradeType,
-                           order_type: OrderType, price: Decimal, **kwargs) -> Tuple[str, float]:
-        pass
+    async def _place_order(
+            self,
+            order_id: str,
+            trading_pair: str,
+            amount: Decimal,
+            trade_type: TradeType,
+            order_type: OrderType,
+            price: Decimal,
+            **kwargs
+    ) -> Tuple[str, float]:
+
+        market = await self.trading_pair_associated_to_exchange_symbol(symbol=trading_pair)
+        side = "BUY" if trade_type is TradeType.BUY else TradeType.SELL
+        _type = "MARKET" if order_type is OrderType.MARKET else OrderType.LIMIT
+        amount_str = f"{amount:f}"
+        price_str = f"{price:f}"
+
+        api_params = {
+            "market": market,
+            "side": side,
+            "type": _type,
+            "price": price_str,
+            "size": amount_str
+        }
+
+        if order_type == OrderType.LIMIT:
+            api_params["time_in_force"] = "GTC"
+
+        raise Exception("TODO Test this method properly")
+
+        # order_result = await self._api_post(
+        #     path_url=CONSTANTS.API_ORDERS,
+        #     data=api_params,
+        #     is_auth_required=True)
+        #
+        # o_id = order_result["id"]
+        # transact_time = parser.isoparse(order_result["created_at"]).timestamp()
+        #
+        # return o_id, transact_time
 
     async def _place_cancel(self, order_id: str, tracked_order: InFlightOrder):
         pass
