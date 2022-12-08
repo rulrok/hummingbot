@@ -236,7 +236,40 @@ class DigitraExchange(ExchangePyBase):
         pass
 
     async def _all_trade_updates_for_order(self, order: InFlightOrder) -> List[TradeUpdate]:
-        pass
+        # TODO Either derive trades from order state progression or use proper trades endpoint once available
+        # NOTE Using a naive approach of considering FILLED orders as single trade events
+
+        trade_updates = []
+
+        if order.exchange_order_id is not None:
+            order_status = await self._api_get(
+                path_url=CONSTANTS.API_ORDER_PATH.format(order_id=order.exchange_order_id)
+            )
+
+            order_status = order_status["result"]
+
+            if CONSTANTS.ORDER_STATE_MAPPING[order_status["status"]] == OrderState.FILLED:
+                fee = TradeFeeBase.new_spot_fee(
+                    fee_schema=self.trade_fee_schema(),
+                    trade_type=order.trade_type,
+                    percent=Decimal(order_status["fee"])
+                )
+
+                trade_update = TradeUpdate(
+                    trade_id=order_status["id"],
+                    client_order_id=order_status["custom_id"],
+                    exchange_order_id=order.exchange_order_id,
+                    trading_pair=order.trading_pair,
+                    fee=fee,
+                    fill_base_amount=Decimal(order_status["size"]),
+                    # TODO Revise this
+                    fill_quote_amount=Decimal(order_status["size"] * order_status["filled_weighted_price"]),
+                    fill_price=Decimal(order_status["filled_weighted_price"]),
+                    fill_timestamp=parser.isoparse(order_status["updated_at"]).timestamp()
+                )
+                trade_updates.append(trade_update)
+
+        return trade_updates
 
     async def _request_order_status(self, tracked_order: InFlightOrder) -> OrderUpdate:
 
