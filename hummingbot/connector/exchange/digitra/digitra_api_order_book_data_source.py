@@ -191,7 +191,8 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
     async def _connected_websocket_assistant(self) -> WSAssistant:
         websocket_assistant: WSAssistant = await self._api_factory.get_ws_assistant()
         await websocket_assistant.connect(
-            ws_url=CONSTANTS.WSS_PRIVATE_URL[self._domain],
+            ws_url=CONSTANTS.WSS_URL[self._domain],
+            ping_timeout=500
         )
         asyncio.ensure_future(self.__ping_loop(websocket_assistant))
         return websocket_assistant

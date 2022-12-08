@@ -10,7 +10,7 @@ REST_URL = {
     "digitra_testnet": "https://{0}.stg-hb.cloud.digitra.com/",
 }
 
-WSS_PRIVATE_URL = {
+WSS_URL = {
     "digitra_testnet": "wss://taxi-driver-websocket.dev.cloud.atris.com.br/v1/ws"
 }
 
