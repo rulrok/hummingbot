@@ -25,6 +25,7 @@ API_MARKET_PATH = "/markets/{market_symbol}"
 # Private endpoints
 API_BALANCES_PATH = "/balances"
 API_ORDERS_PATH = "/orders"
+API_ORDER_PATH = "/orders/{order_id}"
 
 ENDPOINT_SUBDOM_MAP = {
     # Trade

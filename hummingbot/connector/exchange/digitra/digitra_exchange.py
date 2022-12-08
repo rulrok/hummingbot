@@ -15,7 +15,7 @@ from hummingbot.connector.trading_rule import TradingRule
 from hummingbot.connector.utils import combine_to_hb_trading_pair
 from hummingbot.core.api_throttler.data_types import RateLimit
 from hummingbot.core.data_type.common import OrderType, TradeType
-from hummingbot.core.data_type.in_flight_order import InFlightOrder, OrderUpdate, TradeUpdate
+from hummingbot.core.data_type.in_flight_order import InFlightOrder, OrderState, OrderUpdate, TradeUpdate
 from hummingbot.core.data_type.order_book_tracker_data_source import OrderBookTrackerDataSource
 from hummingbot.core.data_type.trade_fee import AddedToCostTradeFee
 from hummingbot.core.data_type.user_stream_tracker_data_source import UserStreamTrackerDataSource
@@ -172,7 +172,30 @@ class DigitraExchange(ExchangePyBase):
         # return o_id, transact_time
 
     async def _place_cancel(self, order_id: str, tracked_order: InFlightOrder):
-        pass
+        exchange_order_id = tracked_order.exchange_order_id
+
+        try:
+            cancel_result = await self._api_delete(
+                path_url=CONSTANTS.API_ORDER_PATH.format(order_id=exchange_order_id),
+                is_auth_required=True)
+
+            cancel_result = cancel_result["result"]
+
+            order_status: OrderUpdate = OrderUpdate(
+                trading_pair=tracked_order.trading_pair,
+                update_timestamp=tracked_order.last_update_timestamp,
+                new_state=OrderState.PENDING_CANCEL
+                if cancel_result["status"] == "PENDING_CANCELING"
+                else OrderState.CANCELED,  # TODO Revise this
+                client_order_id=tracked_order.client_order_id,
+                exchange_order_id=tracked_order.exchange_order_id,
+            )
+
+            self._order_tracker.process_order_update(order_status)
+        except Exception as e:
+            # TODO Handle exception
+            self.logger().error(e)
+            return False
 
     async def _format_trading_rules(self, exchange_info_dict: Dict[str, Any]) -> List[TradingRule]:
         trading_pair_rules = exchange_info_dict.get("result", [])
