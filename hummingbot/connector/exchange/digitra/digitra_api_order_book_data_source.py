@@ -147,11 +147,11 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
     async def _process_message_for_unknown_channel(self,
                                                    event_message: Dict[str, Any],
                                                    websocket_assistant: WSAssistant):
-        if "pong" or "subscribed" in event_message["type"]:
-            pass
+        if "pong" == event_message["type"]:
+            self.logger().info("OB pong received")
+            return
 
-        if "unknown" in event_message["type"]:
-            self.logger().info("unknown event received", event_message)
+        pass
 
     async def _subscribe_channels(self, ws: WSAssistant):
         """
@@ -194,14 +194,16 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
             ws_url=CONSTANTS.WSS_URL[self._domain],
             ping_timeout=500
         )
-        asyncio.ensure_future(self.__ping_loop(websocket_assistant))
+
+        await self.__ping_loop(websocket_assistant)
+
         return websocket_assistant
 
     async def __ping_loop(self, websocket_assistant):
-        await asyncio.ensure_future(self.__send_ping(websocket_assistant))
-        await asyncio.sleep(1)
+        await self.__send_ping(websocket_assistant)
+        await asyncio.sleep(CONSTANTS.WS_PING_INTERVAL)
 
-        await self.__ping_loop(websocket_assistant)
+        asyncio.ensure_future(self.__ping_loop(websocket_assistant))
 
     async def __send_ping(self, websocket_assistant):
         payload = {"op": "ping"}
