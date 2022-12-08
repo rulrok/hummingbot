@@ -170,7 +170,7 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
                 #     "market": symbol,
                 # }
                 # subscribe_ticker_request: WSJSONRequest = WSJSONRequest(payload=ticker_payload)
-                # await ws.send(subscribe_ticker_request)
+                # await ws.subscribe(subscribe_ticker_request)
 
                 depth_payload = {
                     "op": "subscribe",
@@ -179,7 +179,7 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
                 }
                 subscribe_orderbook_request: WSJSONRequest = WSJSONRequest(payload=depth_payload)
 
-                await ws.send(subscribe_orderbook_request)
+                await ws.subscribe(subscribe_orderbook_request)
 
                 self.logger().info(f"Subscribed to public order book and trade channels of {trading_pair}...")
         except asyncio.CancelledError:

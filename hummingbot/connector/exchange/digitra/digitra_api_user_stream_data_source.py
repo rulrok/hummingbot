@@ -55,7 +55,7 @@ class DigitraAPIUserStreamDataSource(UserStreamTrackerDataSource):
             "channel": "orders"
         }
         user_orders_request = WSJSONRequest(payload=payload)
-        await websocket_assistant.send(request=user_orders_request)
+        await websocket_assistant.subscribe(request=user_orders_request)
 
     async def __ping_loop(self, websocket_assistant: WSAssistant):
         await self._send_ping(websocket_assistant)

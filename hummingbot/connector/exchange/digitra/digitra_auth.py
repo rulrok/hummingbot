@@ -32,7 +32,7 @@ class DigitraAuth(AuthBase):
             "op": "login",
             "key": self.jwt
         }
-        return request  # pass-through
+        return request
 
     def __generate_auth_headers(self):
         """

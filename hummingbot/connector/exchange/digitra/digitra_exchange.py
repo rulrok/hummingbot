@@ -66,11 +66,11 @@ class DigitraExchange(ExchangePyBase):
 
     @property
     def client_order_id_max_length(self) -> int:
-        return 32
+        return 25
 
     @property
     def client_order_id_prefix(self) -> str:
-        pass
+        return "HB_"
 
     @property
     def trading_rules_request_path(self) -> str:
