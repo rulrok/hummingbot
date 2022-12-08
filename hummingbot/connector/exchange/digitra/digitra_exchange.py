@@ -148,6 +148,7 @@ class DigitraExchange(ExchangePyBase):
         price_str = f"{price:f}"
 
         api_params = {
+            "custom_id": order_id,
             "market": market,
             "side": side,
             "type": _type,
