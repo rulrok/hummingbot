@@ -74,15 +74,15 @@ class DigitraExchange(ExchangePyBase):
 
     @property
     def trading_rules_request_path(self) -> str:
-        return CONSTANTS.API_ALL_MARKETS
+        return CONSTANTS.API_ALL_MARKETS_PATH
 
     @property
     def trading_pairs_request_path(self) -> str:
-        return CONSTANTS.API_ALL_MARKETS
+        return CONSTANTS.API_ALL_MARKETS_PATH
 
     @property
     def check_network_request_path(self) -> str:
-        return CONSTANTS.HEALTH_CHECK_URL
+        return CONSTANTS.API_HEALTH_CHECK_PATH
 
     @property
     def trading_pairs(self) -> List[str]:
@@ -217,7 +217,7 @@ class DigitraExchange(ExchangePyBase):
 
         try:
             result = await self._api_request(
-                CONSTANTS.API_BALANCES,
+                CONSTANTS.API_BALANCES_PATH,
                 RESTMethod.GET,
                 is_auth_required=True
             )

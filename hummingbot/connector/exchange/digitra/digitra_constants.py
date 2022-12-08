@@ -18,22 +18,22 @@ PUBLIC_API_VERSION = "v1"
 PRIVATE_API_VERSION = "v1"
 
 # Public endpoints
-HEALTH_CHECK_URL = "/health-check"
-API_ALL_MARKETS = "/markets"
-API_MARKET = "/markets/{market_symbol}"
+API_HEALTH_CHECK_PATH = "/health-check"
+API_ALL_MARKETS_PATH = "/markets"
+API_MARKET_PATH = "/markets/{market_symbol}"
 
 # Private endpoints
-API_BALANCES = "/balances"
-API_ORDERS = "/orders"
+API_BALANCES_PATH = "/balances"
+API_ORDERS_PATH = "/orders"
 
 ENDPOINT_SUBDOM_MAP = {
     # Trade
-    HEALTH_CHECK_URL: REST_SUBDOM_TRADE,
-    API_MARKET: REST_SUBDOM_TRADE,
-    API_ALL_MARKETS: REST_SUBDOM_TRADE,
+    API_HEALTH_CHECK_PATH: REST_SUBDOM_TRADE,
+    API_MARKET_PATH: REST_SUBDOM_TRADE,
+    API_ALL_MARKETS_PATH: REST_SUBDOM_TRADE,
 
     # Balance
-    API_BALANCES: REST_SUBDOM_BALANCE
+    API_BALANCES_PATH: REST_SUBDOM_BALANCE
 }
 
 WS_PING_INTERVAL = 10
@@ -63,12 +63,12 @@ RATE_LIMITS = [
     RateLimit(limit_id=HTTP_ENDPOINTS_LIMIT_ID, limit=MAX_REQUESTS, time_interval=MINUTE),
 
     # REST Endpoints
-    RateLimit(limit_id=HEALTH_CHECK_URL, limit=MAX_REQUESTS, time_interval=MINUTE,
+    RateLimit(limit_id=API_HEALTH_CHECK_PATH, limit=MAX_REQUESTS, time_interval=MINUTE,
               linked_limits=[LinkedLimitWeightPair(HTTP_ENDPOINTS_LIMIT_ID)]),
 
-    RateLimit(limit_id=API_ALL_MARKETS, limit=MAX_REQUESTS, time_interval=MINUTE,
+    RateLimit(limit_id=API_ALL_MARKETS_PATH, limit=MAX_REQUESTS, time_interval=MINUTE,
               linked_limits=[LinkedLimitWeightPair(HTTP_ENDPOINTS_LIMIT_ID)]),
 
-    RateLimit(limit_id=API_BALANCES, limit=MAX_REQUESTS, time_interval=MINUTE,
+    RateLimit(limit_id=API_BALANCES_PATH, limit=MAX_REQUESTS, time_interval=MINUTE,
               linked_limits=[LinkedLimitWeightPair(HTTP_ENDPOINTS_LIMIT_ID)])
 ]

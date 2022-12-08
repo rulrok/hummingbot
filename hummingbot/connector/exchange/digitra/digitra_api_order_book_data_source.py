@@ -46,7 +46,7 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
         rest_assistant = await self._api_factory.get_rest_assistant()
 
         prices_response = await rest_assistant.execute_request(
-            url=web_utils.public_rest_url(CONSTANTS.API_ALL_MARKETS, self._domain),
+            url=web_utils.public_rest_url(CONSTANTS.API_ALL_MARKETS_PATH, self._domain),
             method=RESTMethod.GET,
             params={
                 "expand": "PRICES"
@@ -64,7 +64,7 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
         rest_assistant = await self._api_factory.get_rest_assistant()
         snapshot_response = await rest_assistant.execute_request(
-            url=web_utils.public_rest_url(CONSTANTS.API_MARKET.format(market_symbol=market_trading_pair), self._domain),
+            url=web_utils.public_rest_url(CONSTANTS.API_MARKET_PATH.format(market_symbol=market_trading_pair), self._domain),
             method=RESTMethod.GET,
             params={
                 "expand": "ORDER_BOOK"
