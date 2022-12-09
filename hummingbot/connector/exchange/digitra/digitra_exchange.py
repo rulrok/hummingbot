@@ -1,3 +1,4 @@
+import asyncio
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
@@ -233,7 +234,59 @@ class DigitraExchange(ExchangePyBase):
         pass
 
     async def _user_stream_event_listener(self):
-        pass
+        async for event_message in self._iter_user_event_queue():
+            try:
+                _type = event_message.get("type")
+                data = event_message.get("data")
+                channel = event_message.get("channel")
+
+                if _type == "update":
+                    if channel == "orders":
+                        # TODO Either derive trades from order state progression or use proper trades endpoint once available
+                        # NOTE Using a naive approach of considering FILLED orders as single trade events
+                        client_order_id = event_message.get("clientId")
+
+                        if CONSTANTS.ORDER_STATE_MAPPING[data["status"]] == OrderState.FILLED:
+                            tracked_order = self._order_tracker.all_fillable_orders.get(client_order_id)
+                            if tracked_order is not None:
+                                fee = TradeFeeBase.new_spot_fee(
+                                    fee_schema=self.trade_fee_schema(),
+                                    trade_type=tracked_order.trade_type,
+                                    percent=Decimal(0)
+                                )
+
+                                trade_update = TradeUpdate(
+                                    trade_id=str(data["id"]),  # TODO Replace with trade info once trade is available
+                                    client_order_id=client_order_id,
+                                    exchange_order_id=str(data["id"]),
+                                    trading_pair=tracked_order.trading_pair,
+                                    fee=fee,
+                                    fill_base_amount=Decimal(data["size"]),
+                                    # TODO Revise this
+                                    fill_quote_amount=Decimal(data["size"] * data["avgFillPrice"]),
+                                    fill_price=Decimal(data["avgFillPrice"]),
+                                    fill_timestamp=parser.isoparse(data["createdAt"]).timestamp()
+                                )
+                                self._order_tracker.process_trade_update(trade_update)
+
+                        tracked_order = self._order_tracker.all_updatable_orders.get(client_order_id)
+                        if tracked_order is not None:
+                            order_update = OrderUpdate(
+                                trading_pair=tracked_order.trading_pair,
+                                update_timestamp=parser.isoparse(data["createdAt"]).timestamp(),
+                                new_state=CONSTANTS.ORDER_STATE_MAPPING[data["status"]],
+                                client_order_id=client_order_id,
+                                exchange_order_id=str(data["id"])
+                            )
+                            self._order_tracker.process_order_update(order_update)
+
+                # TODO Process balance events once they are available through websocket
+
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                self.logger().error("Unexpected error in user stream listener loop.", exc_info=True)
+                await self._sleep(5.0)
 
     async def _all_trade_updates_for_order(self, order: InFlightOrder) -> List[TradeUpdate]:
         # TODO Either derive trades from order state progression or use proper trades endpoint once available
