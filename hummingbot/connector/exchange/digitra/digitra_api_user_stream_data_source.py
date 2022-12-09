@@ -36,7 +36,6 @@ class DigitraAPIUserStreamDataSource(UserStreamTrackerDataSource):
         websocket_assistant: WSAssistant = await self._api_factory.get_ws_assistant()
         await websocket_assistant.connect(
             ws_url=CONSTANTS.WSS_URL[self._domain],
-            ping_timeout=500,
         )
 
         self.logger().info("Initialized")
@@ -66,9 +65,7 @@ class DigitraAPIUserStreamDataSource(UserStreamTrackerDataSource):
     async def _send_ping(self, websocket_assistant: WSAssistant):
         payload = {"op": "ping"}
         ping_request = WSJSONRequest(payload=payload)
-        await websocket_assistant.ping()
         await websocket_assistant.send(request=ping_request)
-        self.logger().info('US ping sent')
 
     async def _process_event_message(self, event_message: Dict[str, Any], queue: asyncio.Queue):
         if len(event_message) > 0:
@@ -82,7 +79,7 @@ class DigitraAPIUserStreamDataSource(UserStreamTrackerDataSource):
                 msg = event_message.get("msg")
                 self.logger().info(msg)
             elif t == "pong":
-                self.logger().info("US pong received")
+                pass
 
             queue.put_nowait(event_message)
 

@@ -64,7 +64,8 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
         rest_assistant = await self._api_factory.get_rest_assistant()
         snapshot_response = await rest_assistant.execute_request(
-            url=web_utils.public_rest_url(CONSTANTS.API_MARKET_PATH.format(market_symbol=market_trading_pair), self._domain),
+            url=web_utils.public_rest_url(CONSTANTS.API_MARKET_PATH.format(market_symbol=market_trading_pair),
+                                          self._domain),
             method=RESTMethod.GET,
             params={
                 "expand": "ORDER_BOOK"
@@ -135,7 +136,6 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
             return "subscribed"
 
         if t == "pong":
-            self.logger().debug(event_message)
             return "pong"
 
         if t == "update":
@@ -149,9 +149,6 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
     async def _process_message_for_unknown_channel(self,
                                                    event_message: Dict[str, Any],
                                                    websocket_assistant: WSAssistant):
-        if "pong" == event_message["type"]:
-            self.logger().info("OB pong received")
-            return
 
         pass
 
@@ -195,7 +192,6 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
         websocket_assistant: WSAssistant = await self._api_factory.get_ws_assistant()
         await websocket_assistant.connect(
             ws_url=CONSTANTS.WSS_URL[self._domain],
-            ping_timeout=500
         )
 
         await self.__ping_loop(websocket_assistant)
@@ -212,4 +208,3 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
         payload = {"op": "ping"}
         ping_request = WSJSONRequest(payload=payload)
         await websocket_assistant.send(request=ping_request)
-        self.logger().info('OB ping sent')
