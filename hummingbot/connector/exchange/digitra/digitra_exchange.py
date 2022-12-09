@@ -47,6 +47,7 @@ class DigitraExchange(ExchangePyBase):
         self._trading_required = trading_required
         self._trading_pairs = trading_pairs
         super().__init__(client_config_map)
+        self.real_time_balance_update = False
 
     @property
     def authenticator(self) -> AuthBase:
@@ -281,6 +282,8 @@ class DigitraExchange(ExchangePyBase):
                             self._order_tracker.process_order_update(order_update)
 
                 # TODO Process balance events once they are available through websocket
+                # NOTE While websocket does not provide real time updates, 'self.real_time_balance_update' helps with
+                # fetching balances through api in real time
 
             except asyncio.CancelledError:
                 raise
