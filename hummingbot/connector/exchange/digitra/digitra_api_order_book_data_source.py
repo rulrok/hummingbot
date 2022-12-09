@@ -40,13 +40,13 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
             domain=self._domain,
         )
 
-    async def get_last_traded_prices(self,
+    async def get_last_traded_prices(cls,
                                      trading_pairs: List[str],
                                      domain: Optional[str] = None) -> Dict[str, float]:
-        rest_assistant = await self._api_factory.get_rest_assistant()
+        rest_assistant = await web_utils.build_api_factory().get_rest_assistant()
 
         prices_response = await rest_assistant.execute_request(
-            url=web_utils.public_rest_url(CONSTANTS.API_ALL_MARKETS_PATH, self._domain),
+            url=web_utils.public_rest_url(CONSTANTS.API_ALL_MARKETS_PATH, domain),
             method=RESTMethod.GET,
             params={
                 "expand": "PRICES"

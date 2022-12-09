@@ -381,4 +381,4 @@ class DigitraExchange(ExchangePyBase):
         self._set_trading_pair_symbol_map(mapping)
 
     async def get_last_traded_prices(self, trading_pairs: List[str], domain: Optional[str] = None) -> Dict[str, float]:
-        return DigitraAPIOrderBookDataSource.get_last_traded_prices(trading_pairs, domain)
+        return await DigitraAPIOrderBookDataSource.get_last_traded_prices(trading_pairs=trading_pairs, domain=domain)
