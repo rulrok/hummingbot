@@ -226,7 +226,7 @@ class DigitraExchange(ExchangePyBase):
             order_status: OrderUpdate = OrderUpdate(
                 trading_pair=tracked_order.trading_pair,
                 update_timestamp=parser.isoparse(cancel_result["updated_at"]).timestamp(),
-                new_state=CONSTANTS.ORDER_STATE_MAPPING[cancel_result["status"]],  # TODO Revise this
+                new_state=CONSTANTS.ORDER_STATE_MAPPING[cancel_result["status"]],
                 client_order_id=tracked_order.client_order_id,
                 exchange_order_id=tracked_order.exchange_order_id,
             )
@@ -235,7 +235,6 @@ class DigitraExchange(ExchangePyBase):
 
             return order_status.new_state in [OrderState.CANCELED, OrderState.PENDING_CANCEL]
         except Exception as e:
-            # TODO Handle exception
             self.logger().error(e)
             return False
 
