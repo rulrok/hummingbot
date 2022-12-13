@@ -54,6 +54,15 @@ class DigitraConfigMap(BaseConnectorConfigMap):
             prompt_on_new=True,
         )
     )
+    digitra_refresh_token: SecretStr = Field(
+        default=None,
+        client_data=ClientFieldData(
+            prompt=lambda cm: "Enter your Digitra DEV refresh token",
+            is_secure=True,
+            is_connect_key=False,
+            prompt_on_new=False
+        )
+    )
 
     class Config:
         title = "digitra"
@@ -94,6 +103,15 @@ class DigitraTestnetConfigMap(BaseConnectorConfigMap):
             is_secure=True,
             is_connect_key=True,
             prompt_on_new=True,
+        )
+    )
+    digitra_testnet_refresh_token: SecretStr = Field(
+        default=None,
+        client_data=ClientFieldData(
+            prompt=lambda cm: "Enter your Digitra DEV refresh token",
+            is_secure=True,
+            is_connect_key=True,
+            prompt_on_new=True
         )
     )
 

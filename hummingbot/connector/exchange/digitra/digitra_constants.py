@@ -15,6 +15,10 @@ WSS_URL = {
     "digitra_testnet": "wss://taxi-driver-websocket.dev.cloud.atris.com.br/v1/ws"
 }
 
+AUTH_URL = {
+    "digitra_testnet": "https://digitra-stg-hb.auth.us-east-1.amazoncognito.com/oauth2/token"
+}
+
 PUBLIC_API_VERSION = "v1"
 PRIVATE_API_VERSION = "v1"
 

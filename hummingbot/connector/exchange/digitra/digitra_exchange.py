@@ -39,11 +39,13 @@ class DigitraExchange(ExchangePyBase):
     def __init__(self,
                  client_config_map: "ClientConfigAdapter",
                  digitra_jwt: str,
+                 digitra_refresh_token: Optional[str] = None,
                  trading_pairs: Optional[List[str]] = None,
                  trading_required: bool = True,
                  domain: str = CONSTANTS.DEFAULT_DOMAIN,
                  ):
-        self.api_jwt = digitra_jwt
+        self._jwt = digitra_jwt
+        self._refresh_token = digitra_refresh_token if digitra_refresh_token is not (None or '') else None
         self._domain = domain
         self._trading_required = trading_required
         self._trading_pairs = trading_pairs
@@ -52,7 +54,11 @@ class DigitraExchange(ExchangePyBase):
 
     @property
     def authenticator(self) -> AuthBase:
-        return DigitraAuth(jwt=self.api_jwt, time_provider=self._time_synchronizer)
+        return DigitraAuth(
+            jwt=self._jwt,
+            refresh_token=self._refresh_token,
+            domain=self._domain,
+            time_provider=self._time_synchronizer)
 
     @property
     def name(self) -> str:
