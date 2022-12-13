@@ -247,7 +247,7 @@ class DigitraExchange(ExchangePyBase):
                 trading_pair = await self.trading_pair_associated_to_exchange_symbol(symbol=rule.get("id"))
 
                 min_order_size = str(rule.get("minimum_order_size"))
-                base_increment_size = rule.get("price_increment_size")
+                base_increment_size = str(rule.get("price_increment_size"))
                 quote_increment_size = str(rule.get("increment_size"))
 
                 trading_rule = TradingRule(
