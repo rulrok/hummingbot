@@ -179,7 +179,8 @@ class DigitraExchange(ExchangePyBase):
             path_url=CONSTANTS.API_ORDERS_PATH,
             data=api_params,
             is_auth_required=True,
-            limit_id=CONSTANTS.HTTP_ENDPOINTS_LIMIT_ID)
+            return_err=True,
+            limit_id=CONSTANTS.RATE_SEND_ORDER)
 
         o_id = order_result["result"]["id"]
         transact_time = parser.isoparse(order_result["result"]["created_at"]).timestamp()
@@ -194,9 +195,9 @@ class DigitraExchange(ExchangePyBase):
                 path_url=CONSTANTS.API_ORDER_PATH.format(order_id=exchange_order_id),
                 is_auth_required=True,
                 return_err=True,
-                limit_id=CONSTANTS.HTTP_ENDPOINTS_LIMIT_ID)
+                limit_id=CONSTANTS.RATE_CANCEL_ORDER)
 
-            if "errors" in cancel_result.keys():
+            if "errors" in cancel_result:
                 cancelled = False
                 for err in cancel_result["errors"]:
                     if err["field"] == "status" and err["msg"] == "Order can't be cancelled while in status CANCELED":
@@ -217,6 +218,10 @@ class DigitraExchange(ExchangePyBase):
                     return True
 
             cancel_result = cancel_result["result"]
+
+            if "code" in cancel_result and cancel_result["code"] == 404:
+                await self._order_tracker.process_order_not_found(tracked_order.client_order_id)
+                return True
 
             order_status: OrderUpdate = OrderUpdate(
                 trading_pair=tracked_order.trading_pair,
@@ -309,7 +314,7 @@ class DigitraExchange(ExchangePyBase):
                                 client_order_id=client_order_id,
                                 exchange_order_id=str(data["id"])
                             )
-                            self._order_tracker.process_order_update(order_update)
+                            await self._order_tracker.process_order_update(order_update)
 
                 # TODO Process balance events once they are available through websocket
                 # NOTE While websocket does not provide real time updates, 'self.real_time_balance_update' helps with
@@ -328,11 +333,19 @@ class DigitraExchange(ExchangePyBase):
         trade_updates = []
 
         if order.exchange_order_id is not None:
-            order_status = await self._api_get(
-                path_url=CONSTANTS.API_ORDER_PATH.format(order_id=order.exchange_order_id),
-                is_auth_required=True,
-                limit_id=CONSTANTS.HTTP_ENDPOINTS_LIMIT_ID
-            )
+            order_status = None
+            try:
+                order_status = await self._api_get(
+                    path_url=CONSTANTS.API_ORDER_PATH.format(order_id=order.exchange_order_id),
+                    is_auth_required=True,
+                    limit_id=CONSTANTS.RATE_SHARED_LIMITER
+                )
+            except Exception:
+                if order_status and "msg" in order_status and order_status["msg"] == "Not found":
+                    await self._order_tracker.process_order_not_found(order.client_order_id)
+                    return []
+                else:
+                    raise
 
             order_status = order_status["result"]
 
@@ -361,11 +374,35 @@ class DigitraExchange(ExchangePyBase):
 
     async def _request_order_status(self, tracked_order: InFlightOrder) -> OrderUpdate:
 
-        order_status = await self._api_get(
-            path_url=CONSTANTS.API_ORDER_PATH.format(order_id=tracked_order.exchange_order_id),
-            is_auth_required=True,
-            limit_id=CONSTANTS.HTTP_ENDPOINTS_LIMIT_ID
-        )
+        if tracked_order.exchange_order_id is None:
+            return OrderUpdate(
+                client_order_id=tracked_order.client_order_id,
+                exchange_order_id=None,
+                trading_pair=tracked_order.trading_pair,
+                update_timestamp=tracked_order.creation_timestamp,
+                new_state=OrderState.FAILED
+            )
+
+        order_status = None
+        try:
+            order_status = await self._api_get(
+                path_url=CONSTANTS.API_ORDER_PATH.format(order_id=tracked_order.exchange_order_id),
+                is_auth_required=True,
+                limit_id=CONSTANTS.RATE_SHARED_LIMITER
+            )
+        except Exception as e:
+            if order_status and "msg" in order_status and order_status["msg"] == "Not found":
+                await self._order_tracker.process_order_not_found(tracked_order.client_order_id)
+                return OrderUpdate(
+                    client_order_id=tracked_order.client_order_id,
+                    exchange_order_id=None,
+                    trading_pair=tracked_order.trading_pair,
+                    update_timestamp=tracked_order.creation_timestamp,
+                    new_state=OrderState.FAILED
+                )
+            else:
+                self.logger().error(e)
+                raise
 
         order_status = order_status["result"]
 
@@ -390,7 +427,7 @@ class DigitraExchange(ExchangePyBase):
                 CONSTANTS.API_BALANCES_PATH,
                 RESTMethod.GET,
                 is_auth_required=True,
-                limit_id=CONSTANTS.HTTP_ENDPOINTS_LIMIT_ID
+                limit_id=CONSTANTS.RATE_SHARED_LIMITER
             )
         except Exception as e:
             self.logger().error(e)

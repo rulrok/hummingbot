@@ -51,7 +51,7 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
             params={
                 "expand": "PRICES"
             },
-            throttler_limit_id=CONSTANTS.HTTP_ENDPOINTS_LIMIT_ID
+            throttler_limit_id=CONSTANTS.RATE_SHARED_LIMITER
         )
 
         trading_pairs_prices = [(p.get('id'), p.get('prices')["price"]) for p in prices_response['result'] if
@@ -70,7 +70,7 @@ class DigitraAPIOrderBookDataSource(OrderBookTrackerDataSource):
             params={
                 "expand": "ORDER_BOOK"
             },
-            throttler_limit_id=CONSTANTS.HTTP_ENDPOINTS_LIMIT_ID
+            throttler_limit_id=CONSTANTS.RATE_SHARED_LIMITER
         )
 
         snapshot_data: Dict[str, Any] = snapshot_response["result"]

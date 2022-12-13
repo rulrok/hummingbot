@@ -68,22 +68,30 @@ def endpoint_subdomain(path: str) -> str or None:
 
 # Rate limit portion
 
-HTTP_ENDPOINTS_LIMIT_ID = "AllHTTP"
-MAX_REQUESTS = 1500
+RATE_SHARED_LIMITER = "AllHTTP"
+RATE_SEND_ORDER = API_ORDERS_PATH
+RATE_CANCEL_ORDER = "DEL " + API_ORDERS_PATH.format(order_id="*")
+MAX_REQUESTS = 750
 
 MINUTE = 60
 
 RATE_LIMITS = [
     # REST API Pool
-    RateLimit(limit_id=HTTP_ENDPOINTS_LIMIT_ID, limit=MAX_REQUESTS, time_interval=MINUTE),
+    RateLimit(limit_id=RATE_SHARED_LIMITER, limit=MAX_REQUESTS, time_interval=MINUTE),
 
     # REST Endpoints
     RateLimit(limit_id=API_HEALTH_CHECK_PATH, limit=MAX_REQUESTS, time_interval=MINUTE,
-              linked_limits=[LinkedLimitWeightPair(HTTP_ENDPOINTS_LIMIT_ID)]),
+              linked_limits=[LinkedLimitWeightPair(RATE_SHARED_LIMITER)]),
 
     RateLimit(limit_id=API_ALL_MARKETS_PATH, limit=MAX_REQUESTS, time_interval=MINUTE,
-              linked_limits=[LinkedLimitWeightPair(HTTP_ENDPOINTS_LIMIT_ID)]),
+              linked_limits=[LinkedLimitWeightPair(RATE_SHARED_LIMITER)]),
 
     RateLimit(limit_id=API_BALANCES_PATH, limit=MAX_REQUESTS, time_interval=MINUTE,
-              linked_limits=[LinkedLimitWeightPair(HTTP_ENDPOINTS_LIMIT_ID)])
+              linked_limits=[LinkedLimitWeightPair(RATE_SHARED_LIMITER)]),
+
+    RateLimit(limit_id=RATE_CANCEL_ORDER, limit=15, time_interval=1,
+              linked_limits=[LinkedLimitWeightPair(RATE_SHARED_LIMITER)]),
+
+    RateLimit(limit_id=RATE_SEND_ORDER, limit=15, time_interval=1,
+              linked_limits=[LinkedLimitWeightPair(RATE_SHARED_LIMITER)]),
 ]
