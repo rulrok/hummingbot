@@ -1,4 +1,5 @@
 import asyncio
+import math
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
@@ -149,10 +150,18 @@ class DigitraExchange(ExchangePyBase):
     ) -> Tuple[str, float]:
 
         market = await self.trading_pair_associated_to_exchange_symbol(symbol=trading_pair)
-        side = "BUY" if trade_type is TradeType.BUY else TradeType.SELL
-        _type = "MARKET" if order_type is OrderType.MARKET else OrderType.LIMIT
-        amount_str = f"{amount:f}"
-        price_str = f"{price:f}"
+        side = "BUY" if trade_type is TradeType.BUY else "SELL"
+        _type = "MARKET" if order_type is OrderType.MARKET else "LIMIT"
+
+        # TODO See if precision can be treated natively
+        trading_rule = self.trading_rules[trading_pair]
+        precision = {
+            "amount_digits": 1 + int(-math.log(trading_rule.min_order_size) / math.log(10)),
+            "price_digits": 1 + int(-math.log(trading_rule.min_base_amount_increment) / math.log(10))
+        }
+
+        amount_str = str(round(amount, precision["amount_digits"]))
+        price_str = str(round(price, precision["price_digits"]))
 
         api_params = {
             "custom_id": order_id,
@@ -166,17 +175,16 @@ class DigitraExchange(ExchangePyBase):
         if order_type == OrderType.LIMIT:
             api_params["time_in_force"] = "GTC"
 
-        raise Exception("TODO Test this method properly")
+        order_result = await self._api_post(
+            path_url=CONSTANTS.API_ORDERS_PATH,
+            data=api_params,
+            is_auth_required=True,
+            limit_id=CONSTANTS.HTTP_ENDPOINTS_LIMIT_ID)
 
-        # order_result = await self._api_post(
-        #     path_url=CONSTANTS.API_ORDERS,
-        #     data=api_params,
-        #     is_auth_required=True)
-        #
-        # o_id = order_result["id"]
-        # transact_time = parser.isoparse(order_result["created_at"]).timestamp()
-        #
-        # return o_id, transact_time
+        o_id = order_result["result"]["id"]
+        transact_time = parser.isoparse(order_result["result"]["created_at"]).timestamp()
+
+        return o_id, transact_time
 
     async def _place_cancel(self, order_id: str, tracked_order: InFlightOrder):
         exchange_order_id = tracked_order.exchange_order_id
@@ -184,21 +192,43 @@ class DigitraExchange(ExchangePyBase):
         try:
             cancel_result = await self._api_delete(
                 path_url=CONSTANTS.API_ORDER_PATH.format(order_id=exchange_order_id),
-                is_auth_required=True)
+                is_auth_required=True,
+                return_err=True,
+                limit_id=CONSTANTS.HTTP_ENDPOINTS_LIMIT_ID)
+
+            if "errors" in cancel_result.keys():
+                cancelled = False
+                for err in cancel_result["errors"]:
+                    if err["field"] == "status" and err["msg"] == "Order can't be cancelled while in status CANCELED":
+                        cancelled = True
+                        break
+
+                if not cancelled:
+                    raise Exception(cancel_result["errors"])
+                else:
+                    order_status: OrderUpdate = OrderUpdate(
+                        trading_pair=tracked_order.trading_pair,
+                        update_timestamp=tracked_order.last_update_timestamp,
+                        new_state=OrderState.CANCELED,
+                        client_order_id=tracked_order.client_order_id,
+                        exchange_order_id=tracked_order.exchange_order_id,
+                    )
+                    await self._order_tracker.process_order_update(order_status)
+                    return True
 
             cancel_result = cancel_result["result"]
 
             order_status: OrderUpdate = OrderUpdate(
                 trading_pair=tracked_order.trading_pair,
-                update_timestamp=tracked_order.last_update_timestamp,
-                new_state=OrderState.PENDING_CANCEL
-                if cancel_result["status"] == "PENDING_CANCELING"
-                else OrderState.CANCELED,  # TODO Revise this
+                update_timestamp=parser.isoparse(cancel_result["updated_at"]).timestamp(),
+                new_state=CONSTANTS.ORDER_STATE_MAPPING[cancel_result["status"]],  # TODO Revise this
                 client_order_id=tracked_order.client_order_id,
                 exchange_order_id=tracked_order.exchange_order_id,
             )
 
-            self._order_tracker.process_order_update(order_status)
+            await self._order_tracker.process_order_update(order_status)
+
+            return order_status.new_state in [OrderState.CANCELED, OrderState.PENDING_CANCEL]
         except Exception as e:
             # TODO Handle exception
             self.logger().error(e)
@@ -211,18 +241,18 @@ class DigitraExchange(ExchangePyBase):
             try:
                 trading_pair = await self.trading_pair_associated_to_exchange_symbol(symbol=rule.get("id"))
 
-                min_order_size = Decimal(rule.get("minimum_order_size"))
-                tick_size = rule.get("price_increment_size")
-                step_size = Decimal(rule.get("increment_size"))
-                min_notional = Decimal(rule.get("minimum_order_size"))
+                min_order_size = str(rule.get("minimum_order_size"))
+                base_increment_size = rule.get("price_increment_size")
+                quote_increment_size = str(rule.get("increment_size"))
 
-                retval.append(
-                    # TODO Revise if params are correct
-                    TradingRule(trading_pair,
-                                min_order_size=min_order_size,
-                                min_price_increment=Decimal(tick_size),
-                                min_base_amount_increment=Decimal(step_size),
-                                min_notional_size=Decimal(min_notional)))
+                trading_rule = TradingRule(
+                    trading_pair,
+                    min_order_size=Decimal(min_order_size),
+                    min_price_increment=Decimal(quote_increment_size),
+                    min_base_amount_increment=Decimal(base_increment_size),
+                )
+
+                retval.append(trading_rule)
 
             except Exception:
                 self.logger().exception(f"Error parsing the trading pair rule {rule}. Skipping.")
@@ -299,7 +329,9 @@ class DigitraExchange(ExchangePyBase):
 
         if order.exchange_order_id is not None:
             order_status = await self._api_get(
-                path_url=CONSTANTS.API_ORDER_PATH.format(order_id=order.exchange_order_id)
+                path_url=CONSTANTS.API_ORDER_PATH.format(order_id=order.exchange_order_id),
+                is_auth_required=True,
+                limit_id=CONSTANTS.HTTP_ENDPOINTS_LIMIT_ID
             )
 
             order_status = order_status["result"]
@@ -330,14 +362,18 @@ class DigitraExchange(ExchangePyBase):
     async def _request_order_status(self, tracked_order: InFlightOrder) -> OrderUpdate:
 
         order_status = await self._api_get(
-            path_url=CONSTANTS.API_ORDER_PATH.format(order_id=tracked_order.exchange_order_id)
+            path_url=CONSTANTS.API_ORDER_PATH.format(order_id=tracked_order.exchange_order_id),
+            is_auth_required=True,
+            limit_id=CONSTANTS.HTTP_ENDPOINTS_LIMIT_ID
         )
 
-        new_state = CONSTANTS[order_status["status"]]
+        order_status = order_status["result"]
+
+        new_state = CONSTANTS.ORDER_STATE_MAPPING[order_status["status"]]
 
         order_update = OrderUpdate(
             client_order_id=tracked_order.client_order_id,
-            exchange_order_id=order_status["id"],
+            exchange_order_id=tracked_order.exchange_order_id,
             trading_pair=tracked_order.trading_pair,
             update_timestamp=parser.isoparse(order_status["updated_at"]).timestamp(),
             new_state=new_state
@@ -353,7 +389,8 @@ class DigitraExchange(ExchangePyBase):
             result = await self._api_request(
                 CONSTANTS.API_BALANCES_PATH,
                 RESTMethod.GET,
-                is_auth_required=True
+                is_auth_required=True,
+                limit_id=CONSTANTS.HTTP_ENDPOINTS_LIMIT_ID
             )
         except Exception as e:
             self.logger().error(e)

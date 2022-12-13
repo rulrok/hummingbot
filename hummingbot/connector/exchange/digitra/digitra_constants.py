@@ -33,6 +33,7 @@ ENDPOINT_SUBDOM_MAP = {
     API_HEALTH_CHECK_PATH: REST_SUBDOM_TRADE,
     API_MARKET_PATH: REST_SUBDOM_TRADE,
     API_ALL_MARKETS_PATH: REST_SUBDOM_TRADE,
+    API_ORDERS_PATH: REST_SUBDOM_TRADE,
 
     # Balance
     API_BALANCES_PATH: REST_SUBDOM_BALANCE
@@ -62,10 +63,10 @@ def endpoint_subdomain(path: str) -> str or None:
         if str(path).__contains__(k):
             return v
 
-    return None
+    raise Exception("Missing endpoint subdomain mapping")
 
-    # Rate limit portion
 
+# Rate limit portion
 
 HTTP_ENDPOINTS_LIMIT_ID = "AllHTTP"
 MAX_REQUESTS = 1500
