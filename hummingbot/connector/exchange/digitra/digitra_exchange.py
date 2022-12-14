@@ -1,5 +1,4 @@
 import asyncio
-import math
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
@@ -159,15 +158,8 @@ class DigitraExchange(ExchangePyBase):
         side = "BUY" if trade_type is TradeType.BUY else "SELL"
         _type = "MARKET" if order_type is OrderType.MARKET else "LIMIT"
 
-        # TODO See if precision can be treated natively
-        trading_rule = self.trading_rules[trading_pair]
-        precision = {
-            "amount_digits": 1 + int(-math.log(trading_rule.min_order_size) / math.log(10)),
-            "price_digits": 1 + int(-math.log(trading_rule.min_base_amount_increment) / math.log(10))
-        }
-
-        amount_str = str(round(amount, precision["amount_digits"]))
-        price_str = str(round(price, precision["price_digits"]))
+        amount_str = f"{amount:f}"
+        price_str = f"{price:f}"
 
         api_params = {
             "custom_id": order_id,
@@ -251,15 +243,11 @@ class DigitraExchange(ExchangePyBase):
             try:
                 trading_pair = await self.trading_pair_associated_to_exchange_symbol(symbol=rule.get("id"))
 
-                min_order_size = str(rule.get("minimum_order_size"))
-                base_increment_size = str(rule.get("price_increment_size"))
-                quote_increment_size = str(rule.get("increment_size"))
-
                 trading_rule = TradingRule(
                     trading_pair,
-                    min_order_size=Decimal(min_order_size),
-                    min_price_increment=Decimal(quote_increment_size),
-                    min_base_amount_increment=Decimal(base_increment_size),
+                    min_order_size=Decimal(str(rule.get("minimum_order_size"))),
+                    min_price_increment=Decimal(str(rule.get("price_increment_size"))),
+                    min_base_amount_increment=Decimal(str(rule.get("increment_size"))),
                 )
 
                 retval.append(trading_rule)
