@@ -28,7 +28,7 @@ class DigitraAuth(AuthBase):
         self.time_provider = time_provider
 
     async def rest_authenticate(self, request: RESTRequest) -> RESTRequest:
-        auth_headers = self.__generate_auth_headers()
+        auth_headers = await self.__generate_auth_headers()
 
         headers = {
             "Accept": "application/json"
@@ -41,9 +41,10 @@ class DigitraAuth(AuthBase):
         return request
 
     async def ws_authenticate(self, request: WSRequest) -> WSRequest:
+        token = await self.get_jwt()
         request.payload = {
             "op": "login",
-            "key": await self.get_jwt()
+            "key": token
         }
         return request
 
@@ -76,11 +77,12 @@ class DigitraAuth(AuthBase):
                 tokens = await response.json()
                 self._jwt = tokens["access_token"]
 
-    def __generate_auth_headers(self):
+    async def __generate_auth_headers(self):
         """
         Adds Authorization header with jwt token to request
         """
+        token = await self.get_jwt()
         headers = {
-            "Authorization": "Bearer " + self._jwt
+            "Authorization": "Bearer " + token
         }
         return headers
