@@ -2,7 +2,7 @@ import time
 from typing import Optional
 
 import aiohttp
-import jwt
+import jwt as JWT
 
 from hummingbot.connector.exchange.digitra import digitra_constants as CONSTANTS
 from hummingbot.connector.time_synchronizer import TimeSynchronizer
@@ -22,7 +22,7 @@ class DigitraAuth(AuthBase):
                  ):
         self._domain = domain
         self._refresh_token = refresh_token
-        self._jwt = jwt
+        self._set_jwt(jwt)
         self.api_key = api_key
         self.secret_key = secret_key
         self.time_provider = time_provider
@@ -49,13 +49,18 @@ class DigitraAuth(AuthBase):
         return request
 
     async def get_jwt(self) -> str:
-        await self.__ensure_jwt()
-        return self._jwt
+        return await self.__ensure_valid_jwt()
 
-    async def __ensure_jwt(self):
-        unvalidated = jwt.decode(self._jwt, verify=False)
-        if unvalidated["exp"] - time.time() > 0:
-            pass
+    def _set_jwt(self, jwt: str):
+        unvalidated = JWT.decode(jwt, verify=False)
+        self._next_exp_time = unvalidated["exp"]
+        self._client_id = unvalidated["client_id"]
+        self._jwt = jwt
+
+    async def __ensure_valid_jwt(self) -> str:
+
+        if self._next_exp_time > time.time():
+            return self._jwt
 
         if self._refresh_token is None:
             raise Exception("JWT is expired and no refresh_token has been provided")
@@ -69,13 +74,15 @@ class DigitraAuth(AuthBase):
         url = CONSTANTS.AUTH_URL[self._domain]
         data = aiohttp.FormData()
         data.add_field("grant_type", "refresh_token")
-        data.add_field("client_id", unvalidated["client_id"])
+        data.add_field("client_id", self._client_id)
         data.add_field("refresh_token", self._refresh_token)
 
         async with aiohttp.ClientSession() as session:
             async with session.post(url, data=data) as response:
                 tokens = await response.json()
-                self._jwt = tokens["access_token"]
+                jwt = tokens["access_token"]
+                self._set_jwt(jwt)
+                return self._jwt
 
     async def __generate_auth_headers(self):
         """
