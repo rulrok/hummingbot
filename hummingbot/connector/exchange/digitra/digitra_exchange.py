@@ -309,15 +309,15 @@ class DigitraExchange(ExchangePyBase):
                                     fill_timestamp=parser.isoparse(data["createdAt"]).timestamp()
                                 )
                                 self._order_tracker.process_trade_update(trade_update)
-                            else:
-                                order_update = OrderUpdate(
-                                    trading_pair=in_flight_order.trading_pair,
-                                    update_timestamp=time.time(),
-                                    new_state=CONSTANTS.ORDER_STATE_MAPPING[data["status"]],
-                                    client_order_id=in_flight_order.client_order_id,
-                                    exchange_order_id=str(data["id"])
-                                )
-                                await self._order_tracker.process_order_update(order_update)
+
+                            order_update = OrderUpdate(
+                                trading_pair=in_flight_order.trading_pair,
+                                update_timestamp=time.time(),
+                                new_state=CONSTANTS.ORDER_STATE_MAPPING[data["status"]],
+                                client_order_id=in_flight_order.client_order_id,
+                                exchange_order_id=str(data["id"])
+                            )
+                            await self._order_tracker.process_order_update(order_update)
 
                 # TODO Process balance events once they are available through websocket
                 # NOTE While websocket does not provide real time updates, 'self.real_time_balance_update' helps with
