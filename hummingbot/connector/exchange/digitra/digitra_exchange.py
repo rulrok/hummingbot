@@ -1,5 +1,7 @@
 import asyncio
+import time
 from decimal import Decimal
+from functools import reduce
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from dateutil import parser
@@ -271,43 +273,51 @@ class DigitraExchange(ExchangePyBase):
 
                 if _type == "update":
                     if channel == "orders":
-                        # TODO Either derive trades from order state progression or use proper trades endpoint once available
-                        # NOTE Using a naive approach of considering FILLED orders as single trade events
-                        client_order_id = event_message.get("clientId")
+                        in_flight_order = next(
+                            value
+                            for value in self._order_tracker.all_fillable_orders.values() if
+                            value.exchange_order_id == data['id']
+                        )
 
-                        if CONSTANTS.ORDER_STATE_MAPPING[data["status"]] == OrderState.FILLED:
-                            tracked_order = self._order_tracker.all_fillable_orders.get(client_order_id)
-                            if tracked_order is not None:
+                        if in_flight_order is not None:
+                            current_filled = Decimal(str(data["filledSize"]))
+                            in_flight_filled = reduce(
+                                lambda _, v: v['fill_base_amount'], in_flight_order.order_fills,
+                                0)
+
+                            missing_filled = current_filled - in_flight_filled
+
+                            if missing_filled > 0:
                                 fee = TradeFeeBase.new_spot_fee(
                                     fee_schema=self.trade_fee_schema(),
-                                    trade_type=tracked_order.trade_type,
+                                    trade_type=in_flight_order.trade_type,
                                     percent=Decimal(0)
                                 )
 
                                 trade_update = TradeUpdate(
-                                    trade_id=str(data["id"]),  # TODO Replace with trade info once trade is available
-                                    client_order_id=client_order_id,
+                                    # TODO Replace with trade info once trade is available
+                                    trade_id=f"{data['id']}-{int(time.time())}",
+                                    client_order_id=in_flight_order.client_order_id,
                                     exchange_order_id=str(data["id"]),
-                                    trading_pair=tracked_order.trading_pair,
+                                    trading_pair=in_flight_order.trading_pair,
                                     fee=fee,
-                                    fill_base_amount=Decimal(data["size"]),
+                                    fill_base_amount=Decimal(str(data["filledSize"])),
                                     # TODO Revise this
-                                    fill_quote_amount=Decimal(data["size"] * data["avgFillPrice"]),
-                                    fill_price=Decimal(data["avgFillPrice"]),
+                                    fill_quote_amount=Decimal(str(data["filledSize"])) * Decimal(
+                                        str(data["avgFillPrice"])),
+                                    fill_price=Decimal(str(data["avgFillPrice"])),
                                     fill_timestamp=parser.isoparse(data["createdAt"]).timestamp()
                                 )
                                 self._order_tracker.process_trade_update(trade_update)
-
-                        tracked_order = self._order_tracker.all_updatable_orders.get(client_order_id)
-                        if tracked_order is not None:
-                            order_update = OrderUpdate(
-                                trading_pair=tracked_order.trading_pair,
-                                update_timestamp=parser.isoparse(data["createdAt"]).timestamp(),
-                                new_state=CONSTANTS.ORDER_STATE_MAPPING[data["status"]],
-                                client_order_id=client_order_id,
-                                exchange_order_id=str(data["id"])
-                            )
-                            await self._order_tracker.process_order_update(order_update)
+                            else:
+                                order_update = OrderUpdate(
+                                    trading_pair=in_flight_order.trading_pair,
+                                    update_timestamp=time.time(),
+                                    new_state=CONSTANTS.ORDER_STATE_MAPPING[data["status"]],
+                                    client_order_id=in_flight_order.client_order_id,
+                                    exchange_order_id=str(data["id"])
+                                )
+                                await self._order_tracker.process_order_update(order_update)
 
                 # TODO Process balance events once they are available through websocket
                 # NOTE While websocket does not provide real time updates, 'self.real_time_balance_update' helps with
@@ -320,8 +330,8 @@ class DigitraExchange(ExchangePyBase):
                 await self._sleep(5.0)
 
     async def _all_trade_updates_for_order(self, order: InFlightOrder) -> List[TradeUpdate]:
-        # TODO Either derive trades from order state progression or use proper trades endpoint once available
-        # NOTE Using a naive approach of considering FILLED orders as single trade events
+        # TODO Use real trades endpoint once available
+        # NOTE We are deriving fake trades com order state based on difference of filled size
 
         trade_updates = []
 
@@ -338,11 +348,16 @@ class DigitraExchange(ExchangePyBase):
                     await self._order_tracker.process_order_not_found(order.client_order_id)
                     return []
                 else:
+                    self.logger().error("Failed to get order status", exc_info=True)
                     raise
 
             order_status = order_status["result"]
 
-            if CONSTANTS.ORDER_STATE_MAPPING[order_status["status"]] == OrderState.FILLED:
+            in_flight_filled = reduce(lambda _, v: v['fill_base_amount'], order.order_fills, 0)
+            current_filled = Decimal(str(order_status["filled"]))
+
+            missing_filled = current_filled - in_flight_filled
+            if missing_filled > 0:
                 fee = TradeFeeBase.new_spot_fee(
                     fee_schema=self.trade_fee_schema(),
                     trade_type=order.trade_type,
@@ -350,15 +365,16 @@ class DigitraExchange(ExchangePyBase):
                 )
 
                 trade_update = TradeUpdate(
-                    trade_id=order_status["id"],
+                    # TODO Get real trade id once available
+                    trade_id=f"{order_status['id']}-{int(time.time())}",
                     client_order_id=order_status["custom_id"],
                     exchange_order_id=order.exchange_order_id,
                     trading_pair=order.trading_pair,
                     fee=fee,
-                    fill_base_amount=Decimal(order_status["size"]),
+                    fill_base_amount=missing_filled,
                     # TODO Revise this
-                    fill_quote_amount=Decimal(order_status["size"] * order_status["filled_weighted_price"]),
-                    fill_price=Decimal(order_status["filled_weighted_price"]),
+                    fill_quote_amount=Decimal(missing_filled) * Decimal(str(order_status["filled_weighted_price"])),
+                    fill_price=Decimal(str(order_status["filled_weighted_price"])),
                     fill_timestamp=parser.isoparse(order_status["updated_at"]).timestamp()
                 )
                 trade_updates.append(trade_update)
