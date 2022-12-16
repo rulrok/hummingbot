@@ -52,10 +52,15 @@ class DigitraAuth(AuthBase):
         return await self.__ensure_valid_jwt()
 
     def _set_jwt(self, jwt: str):
-        unvalidated = JWT.decode(jwt, verify=False)
-        self._next_exp_time = unvalidated["exp"]
-        self._client_id = unvalidated["client_id"]
-        self._jwt = jwt
+        try:
+            unvalidated = JWT.decode(jwt, verify=False)
+            self._next_exp_time = unvalidated["exp"]
+            self._client_id = unvalidated["client_id"]
+            self._jwt = jwt
+        except JWT.DecodeError:
+            self._next_exp_time = -1
+            self._client_id = ''
+            self._jwt = None
 
     async def __ensure_valid_jwt(self) -> str:
 
