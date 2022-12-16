@@ -280,10 +280,10 @@ class DigitraExchange(ExchangePyBase):
                         )
 
                         if in_flight_order is not None:
+
                             current_filled = Decimal(str(data["filledSize"]))
-                            in_flight_filled = reduce(
-                                lambda _, v: v['fill_base_amount'], in_flight_order.order_fills,
-                                0)
+                            in_flight_filled = reduce(lambda acc, v: acc + v.fill_base_amount,
+                                                      in_flight_order.order_fills.values(), 0)
 
                             missing_filled = current_filled - in_flight_filled
 
@@ -353,7 +353,7 @@ class DigitraExchange(ExchangePyBase):
 
             order_status = order_status["result"]
 
-            in_flight_filled = reduce(lambda _, v: v['fill_base_amount'], order.order_fills, 0)
+            in_flight_filled = reduce(lambda acc, v: acc + v.fill_base_amount, order.order_fills.values(), 0)
             current_filled = Decimal(str(order_status["filled"]))
 
             missing_filled = current_filled - in_flight_filled
