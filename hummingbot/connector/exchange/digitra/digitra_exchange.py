@@ -445,8 +445,8 @@ class DigitraExchange(ExchangePyBase):
         balances = result["result"]
         for balance_entry in balances:
             asset_name = balance_entry["asset"]
-            free_balance = Decimal(balance_entry["amount"])
-            total_balance = Decimal(balance_entry["amount"]) + Decimal(balance_entry["amount_trading"])
+            free_balance = Decimal(str(balance_entry["amount"]))
+            total_balance = Decimal(str(balance_entry["amount"])) + Decimal(str(balance_entry["amount_trading"]))
             self._account_available_balances[asset_name] = free_balance
             self._account_balances[asset_name] = total_balance
             remote_asset_names.add(asset_name)
