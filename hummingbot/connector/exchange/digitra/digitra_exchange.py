@@ -277,10 +277,11 @@ class DigitraExchange(ExchangePyBase):
                             value
                             for value in self._order_tracker.all_fillable_orders.values() if
                             value.exchange_order_id == data['id']
-                        )
+                        ) if len(self._order_tracker.all_fillable_orders.values()) > 0 else None
 
-                        if in_flight_order is not None:
-
+                        if in_flight_order is None:
+                            self.logger().warning("Received order udpate for not tracked order", data)
+                        else:
                             current_filled = Decimal(str(data["filledSize"]))
                             in_flight_filled = reduce(lambda acc, v: acc + v.fill_base_amount,
                                                       in_flight_order.order_fills.values(), 0)
