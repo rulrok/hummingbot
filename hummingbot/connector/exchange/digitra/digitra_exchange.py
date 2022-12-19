@@ -435,7 +435,7 @@ class DigitraExchange(ExchangePyBase):
         try:
             result = await self._api_request(
                 CONSTANTS.API_BALANCES_PATH,
-                RESTMethod.GET,
+                method=RESTMethod.GET,
                 is_auth_required=True,
                 limit_id=CONSTANTS.RATE_SHARED_LIMITER
             )
