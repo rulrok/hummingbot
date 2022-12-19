@@ -197,39 +197,46 @@ class DigitraExchange(ExchangePyBase):
                 return_err=True,
                 limit_id=CONSTANTS.RATE_CANCEL_ORDER)
 
-            if "errors" in cancel_result:
-                cancelled = False
-                for err in cancel_result["errors"]:
-                    if err["field"] == "status" and err["msg"] == "Order can't be cancelled while in status CANCELED":
-                        cancelled = True
-                        break
+            self.logger().debug("cancel result for %s %s", order_id, cancel_result, exc_info=True)
 
-                if not cancelled:
-                    raise Exception(cancel_result["errors"])
-                else:
-                    order_status: OrderUpdate = OrderUpdate(
-                        trading_pair=tracked_order.trading_pair,
-                        update_timestamp=tracked_order.last_update_timestamp,
-                        new_state=OrderState.CANCELED,
-                        client_order_id=tracked_order.client_order_id,
-                        exchange_order_id=tracked_order.exchange_order_id,
-                    )
-                    await self._order_tracker.process_order_update(order_status)
-                    return True
+            if "errors" in cancel_result:
+                new_order_state = tracked_order.current_state
+                for err in cancel_result["errors"]:
+                    if err["field"] == "status" and err["msg"] is not None:
+                        if err["msg"].startswith("Order can't be cancelled while in status "):
+                            new_order_state = CONSTANTS.ORDER_STATE_MAPPING[err["msg"].split("in status ")[-1]]
+                            break
+
+                order_status: OrderUpdate = OrderUpdate(
+                    trading_pair=tracked_order.trading_pair,
+                    update_timestamp=tracked_order.last_update_timestamp,
+                    new_state=new_order_state,
+                    client_order_id=tracked_order.client_order_id,
+                    exchange_order_id=tracked_order.exchange_order_id,
+                )
+                await self._order_tracker.process_order_update(order_status)
+                return new_order_state == OrderState.CANCELED
 
             cancel_result = cancel_result["result"]
 
             if "code" in cancel_result and cancel_result["code"] == 404:
-                await self._order_tracker.process_order_not_found(tracked_order.client_order_id)
-                return True
-
-            order_status: OrderUpdate = OrderUpdate(
-                trading_pair=tracked_order.trading_pair,
-                update_timestamp=parser.isoparse(cancel_result["updated_at"]).timestamp(),
-                new_state=CONSTANTS.ORDER_STATE_MAPPING[cancel_result["status"]],
-                client_order_id=tracked_order.client_order_id,
-                exchange_order_id=tracked_order.exchange_order_id,
-            )
+                # await self._order_tracker.process_order_not_found(tracked_order.client_order_id)
+                # TODO For sub-fast operations, the API may incorrectly report the order as non-existing
+                order_status = OrderUpdate(
+                    trading_pair=tracked_order.trading_pair,
+                    update_timestamp=tracked_order.last_update_timestamp,
+                    new_state=OrderState.OPEN,
+                    client_order_id=tracked_order.client_order_id,
+                    exchange_order_id=tracked_order.exchange_order_id,
+                )
+            else:
+                order_status: OrderUpdate = OrderUpdate(
+                    trading_pair=tracked_order.trading_pair,
+                    update_timestamp=parser.isoparse(cancel_result["updated_at"]).timestamp(),
+                    new_state=CONSTANTS.ORDER_STATE_MAPPING[cancel_result["status"]],
+                    client_order_id=tracked_order.client_order_id,
+                    exchange_order_id=tracked_order.exchange_order_id,
+                )
 
             await self._order_tracker.process_order_update(order_status)
 
@@ -275,9 +282,9 @@ class DigitraExchange(ExchangePyBase):
                     if channel == "orders":
                         in_flight_order = next(
                             value
-                            for value in self._order_tracker.all_fillable_orders.values() if
+                            for value in self._order_tracker.all_orders.values() if
                             value.exchange_order_id == data['id']
-                        ) if len(self._order_tracker.all_fillable_orders.values()) > 0 else None
+                        ) if len(self._order_tracker.all_orders.values()) > 0 else None
 
                         if in_flight_order is None:
                             self.logger().warning("Received order udpate for not tracked order", data)
@@ -384,23 +391,34 @@ class DigitraExchange(ExchangePyBase):
 
     async def _request_order_status(self, tracked_order: InFlightOrder) -> OrderUpdate:
 
-        if tracked_order.exchange_order_id is None:
-            return OrderUpdate(
-                client_order_id=tracked_order.client_order_id,
-                exchange_order_id=None,
-                trading_pair=tracked_order.trading_pair,
-                update_timestamp=tracked_order.creation_timestamp,
-                new_state=OrderState.FAILED
-            )
-
         order_status = None
+
         try:
-            order_status = await self._api_get(
-                path_url=CONSTANTS.API_ORDER_PATH.format(order_id=tracked_order.exchange_order_id),
-                is_auth_required=True,
-                limit_id=CONSTANTS.RATE_SHARED_LIMITER
-            )
-        except Exception as e:
+            if tracked_order.exchange_order_id is not None:
+                order_status = await self._api_get(
+                    path_url=CONSTANTS.API_ORDER_PATH.format(order_id=tracked_order.exchange_order_id),
+                    is_auth_required=True,
+                    limit_id=CONSTANTS.RATE_SHARED_LIMITER
+                )
+
+                order_status = order_status["result"]
+            else:
+                all_opened_orders = await self._api_get(
+                    path_url=CONSTANTS.API_ORDERS_PATH,
+                    params={
+                        "page": 1,
+                        "page_size": 100,
+                        "status": "OPEN"
+                    },
+                    is_auth_required=True,
+                    limit_id=CONSTANTS.RATE_SHARED_LIMITER
+                )
+
+                all_opened_orders = all_opened_orders['result']
+                order_status = [order for order in all_opened_orders if
+                                order['custom_id'] == tracked_order.client_order_id]
+                order_status = order_status[0] if len(order_status) else []
+        except Exception:
             if order_status and "msg" in order_status and order_status["msg"] == "Not found":
                 await self._order_tracker.process_order_not_found(tracked_order.client_order_id)
                 return OrderUpdate(
@@ -411,16 +429,25 @@ class DigitraExchange(ExchangePyBase):
                     new_state=OrderState.FAILED
                 )
             else:
-                self.logger().error(e)
+                self.logger().error("Failed to get order status", exc_info=True)
                 raise
 
-        order_status = order_status["result"]
+        if order_status is None:
+            await self._order_tracker.process_order_not_found(tracked_order.client_order_id)
+            return OrderUpdate(
+                client_order_id=tracked_order.client_order_id,
+                exchange_order_id=None,
+                trading_pair=tracked_order.trading_pair,
+                update_timestamp=tracked_order.creation_timestamp,
+                new_state=OrderState.FAILED
+            )
 
         new_state = CONSTANTS.ORDER_STATE_MAPPING[order_status["status"]]
 
         order_update = OrderUpdate(
             client_order_id=tracked_order.client_order_id,
-            exchange_order_id=tracked_order.exchange_order_id,
+            exchange_order_id=tracked_order.exchange_order_id if tracked_order.exchange_order_id is not None else
+            order_status['id'],
             trading_pair=tracked_order.trading_pair,
             update_timestamp=parser.isoparse(order_status["updated_at"]).timestamp(),
             new_state=new_state
