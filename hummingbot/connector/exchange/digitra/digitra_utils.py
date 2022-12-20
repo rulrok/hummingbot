@@ -55,7 +55,7 @@ class DigitraConfigMap(BaseConnectorConfigMap):
         )
     )
     digitra_refresh_token: SecretStr = Field(
-        default=None,
+        default=...,
         client_data=ClientFieldData(
             prompt=lambda cm: "Enter your Digitra DEV refresh token",
             is_secure=True,
