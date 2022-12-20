@@ -182,6 +182,8 @@ class DigitraExchange(ExchangePyBase):
             return_err=True,
             limit_id=CONSTANTS.RATE_SEND_ORDER)
 
+        self.logger().debug('place order response %s', order_result)
+
         o_id = order_result["result"]["id"]
         transact_time = parser.isoparse(order_result["result"]["created_at"]).timestamp()
 
@@ -197,7 +199,7 @@ class DigitraExchange(ExchangePyBase):
                 return_err=True,
                 limit_id=CONSTANTS.RATE_CANCEL_ORDER)
 
-            self.logger().debug("cancel result for %s %s", order_id, cancel_result, exc_info=True)
+            self.logger().debug("cancel result for order %s: %s", order_id, cancel_result, exc_info=True)
 
             if "errors" in cancel_result:
                 new_order_state = tracked_order.current_state
@@ -400,6 +402,8 @@ class DigitraExchange(ExchangePyBase):
                     is_auth_required=True,
                     limit_id=CONSTANTS.RATE_SHARED_LIMITER
                 )
+
+                self.logger().debug('order %s status %s', tracked_order.client_order_id, order_status)
 
                 order_status = order_status["result"]
             else:
